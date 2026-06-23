@@ -40,7 +40,7 @@ function Overview() {
   };
 
 return (
-  <div style={{ fontFamily: "Arial", background: "#0e5858", minHeight: "100vh" }}>
+  <div style={{ fontFamily: "Arial", background: "#4e5050", minHeight: "100vh" }}>
 
     <TopBar lastUpdated={lastUpdated} onRefresh={refreshData} />
 
