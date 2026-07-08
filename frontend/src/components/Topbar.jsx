@@ -10,7 +10,6 @@ function TopBar({ lastUpdated, onRefresh }) {
         alignItems: "center",
       }}
     >
-      {/* LEFT SIDE (REMOVE TITLE COMPLETELY) */}
       <p style={{ margin: 0, fontSize: "14px", color: "#6b7280" }}>
         Last synced: {lastUpdated.toLocaleTimeString()}
       </p>
