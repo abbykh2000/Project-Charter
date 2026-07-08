@@ -40,13 +40,11 @@ function FrameworkCard({ framework }) {
         e.currentTarget.style.boxShadow = `0 6px 18px ${statusStyle.glow}`;
       }}
     >
-      {/* HEADER ROW */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>
           {framework.name}
         </h3>
 
-        {/* FRAMEWORK TAG BADGE */}
         <span
           style={{
             fontSize: "11px",
@@ -61,7 +59,6 @@ function FrameworkCard({ framework }) {
         </span>
       </div>
 
-      {/* STATUS */}
       <p style={{ margin: "10px 0", fontSize: "13px" }}>
         Status:{" "}
         <span
@@ -78,7 +75,6 @@ function FrameworkCard({ framework }) {
         </span>
       </p>
 
-      {/* COMPLIANCE PROGRESS */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ fontSize: "13px", color: "#6b7280" }}>
