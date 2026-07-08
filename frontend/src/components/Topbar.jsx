@@ -1,13 +1,30 @@
 function TopBar({ lastUpdated, onRefresh }) {
   return (
-    <div style={{ padding: "10px", borderBottom: "1px solid #ccc" }}>
-      <h2>Compliance Dashboard</h2>
-
-      <p>
+    <div
+      style={{
+        padding: "12px 20px",
+        borderBottom: "1px solid #e5e7eb",
+        background: "#ffffff",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      {/* LEFT SIDE (REMOVE TITLE COMPLETELY) */}
+      <p style={{ margin: 0, fontSize: "14px", color: "#6b7280" }}>
         Last synced: {lastUpdated.toLocaleTimeString()}
       </p>
 
-      <button onClick={onRefresh}>
+      {/* RIGHT SIDE */}
+      <button
+        onClick={onRefresh}
+        style={{
+          padding: "6px 12px",
+          borderRadius: "6px",
+          border: "1px solid #ddd",
+          cursor: "pointer",
+        }}
+      >
         Refresh
       </button>
     </div>
