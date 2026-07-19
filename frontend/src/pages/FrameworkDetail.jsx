@@ -1,30 +1,44 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { frameworks } from "../data/complianceData";
+import ComplianceTrendChart from "../components/ComplianceTrendChart";
+import ControlsList from "../components/ControlsList";
 
 function FrameworkDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  console.log("Clicked ID:", id);
-
   const framework = frameworks.find(
     (f) => f.id === Number(id)
   );
 
-  console.log("Matched framework:", framework);
-
   if (!framework) {
     return (
-      <div style={{ padding: "20px" }}>
+      <div style={{ padding: "20px", fontFamily: "Arial" }}>
         <h2>Framework not found</h2>
-        <p>ID received: {id}</p>
 
-        <button onClick={() => navigate("/")}>
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            backgroundColor: "#1e293b",
+            color: "#ffffff",
+            padding: "10px 18px",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer",
+            marginTop: "15px",
+          }}
+        >
           ← Back to Dashboard
         </button>
       </div>
     );
   }
+
+  const passedPercent =
+    (framework.passed / framework.total) * 100;
+
+  const failedPercent =
+    (framework.failed / framework.total) * 100;
 
   return (
     <div
@@ -35,32 +49,22 @@ function FrameworkDetail() {
         minHeight: "100vh",
       }}
     >
-<button
-  onClick={() => navigate("/")}
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-
-    backgroundColor: "#1e293b",
-    color: "#ffffff",
-
-    padding: "12px 20px",
-
-    border: "none",
-    borderRadius: "8px",
-
-    fontSize: "14px",
-    fontWeight: "600",
-
-    cursor: "pointer",
-
-    marginBottom: "30px",
-  }}
->
-  ← Back to Dashboard
-</button>
+      {/* Back Button */}
+      <button
+        onClick={() => navigate("/")}
+        style={{
+          backgroundColor: "#1e293b",
+          color: "#ffffff",
+          padding: "10px 18px",
+          border: "none",
+          borderRadius: "8px",
+          cursor: "pointer",
+          marginBottom: "25px",
+          fontWeight: "600",
+        }}
+      >
+        ← Back to Dashboard
+      </button>
 
       {/* Header */}
       <h1
@@ -76,7 +80,6 @@ function FrameworkDetail() {
         style={{
           color: "#64748b",
           marginBottom: "30px",
-          fontSize: "15px",
         }}
       >
         Framework Compliance Overview
@@ -91,7 +94,6 @@ function FrameworkDetail() {
           marginBottom: "35px",
         }}
       >
-        {/* Compliance */}
         <div
           style={{
             background: "#ffffff",
@@ -105,12 +107,11 @@ function FrameworkDetail() {
             Compliance
           </h3>
 
-          <h2 style={{ color: "#1e293b", marginBottom: 0 }}>
+          <h2 style={{ color: "#1e293b" }}>
             {framework.compliance}%
           </h2>
         </div>
 
-        {/* Passed Controls */}
         <div
           style={{
             background: "#ffffff",
@@ -124,12 +125,11 @@ function FrameworkDetail() {
             Passed Controls
           </h3>
 
-          <h2 style={{ color: "#16a34a", marginBottom: 0 }}>
+          <h2 style={{ color: "#16a34a" }}>
             {framework.passed}
           </h2>
         </div>
 
-        {/* Failed Controls */}
         <div
           style={{
             background: "#ffffff",
@@ -143,12 +143,11 @@ function FrameworkDetail() {
             Failed Controls
           </h3>
 
-          <h2 style={{ color: "#dc2626", marginBottom: 0 }}>
+          <h2 style={{ color: "#dc2626" }}>
             {framework.failed}
           </h2>
         </div>
 
-        {/* Total Controls */}
         <div
           style={{
             background: "#ffffff",
@@ -162,11 +161,96 @@ function FrameworkDetail() {
             Total Controls
           </h3>
 
-          <h2 style={{ color: "#1e293b", marginBottom: 0 }}>
+          <h2 style={{ color: "#1e293b" }}>
             {framework.total}
           </h2>
         </div>
       </div>
+
+      {/* Controls Breakdown */}
+      <div
+        style={{
+          background: "#ffffff",
+          padding: "25px",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          marginBottom: "30px",
+        }}
+      >
+        <h2
+          style={{
+            marginTop: 0,
+            marginBottom: "25px",
+            color: "#1e293b",
+          }}
+        >
+          Controls Breakdown
+        </h2>
+
+        {/* Passed */}
+        <div style={{ marginBottom: "25px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "8px",
+            }}
+          >
+            <strong>Passed Controls</strong>
+            <strong>{framework.passed}</strong>
+          </div>
+
+          <div
+            style={{
+              background: "#e5e7eb",
+              height: "16px",
+              borderRadius: "999px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${passedPercent}%`,
+                background: "#22c55e",
+                height: "100%",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Failed */}
+        <div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "8px",
+            }}
+          >
+            <strong>Failed Controls</strong>
+            <strong>{framework.failed}</strong>
+          </div>
+
+          <div
+            style={{
+              background: "#e5e7eb",
+              height: "16px",
+              borderRadius: "999px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${failedPercent}%`,
+                background: "#ef4444",
+                height: "100%",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+<ComplianceTrendChart framework={framework} />
 
       {/* Last Updated */}
       <div
@@ -177,21 +261,11 @@ function FrameworkDetail() {
           boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
-        <h3
-          style={{
-            marginTop: 0,
-            color: "#64748b",
-          }}
-        >
+        <h3 style={{ marginTop: 0, color: "#64748b" }}>
           Last Updated
         </h3>
 
-        <p
-          style={{
-            marginBottom: 0,
-            color: "#1e293b",
-          }}
-        >
+        <p style={{ marginBottom: 0 }}>
           Today
         </p>
       </div>
