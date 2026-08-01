@@ -263,24 +263,29 @@ function getControlComments(control) {
 // --------------------------------------------------
 
 /**
- * Matches a Google Sheets row with an existing
+ * Matches one worksheet row to at most one existing
  * dashboard control.
  *
  * Matching priority:
- * 1. Requirement number
+ * 1. Requirement number + question
  * 2. Question
- *
- * Requirement number is preferred because it should
- * remain stable even when the question text changes.
+ * 3. Requirement number only when exactly one unused
+ *    control has that requirement number
  */
 function findMatchingExistingControl(
   existingControls,
   requirementNumber,
-  question
+  question,
+  usedExistingControls
 ) {
-  const safeExistingControls =
+  const availableControls =
     getSafeControls(
       existingControls
+    ).filter(
+      (control) =>
+        !usedExistingControls.has(
+          control
+        )
     );
 
   const comparableRequirementNumber =
@@ -288,73 +293,142 @@ function findMatchingExistingControl(
       requirementNumber
     );
 
-  if (comparableRequirementNumber) {
-    const requirementMatch =
-      safeExistingControls.find(
+  const comparableQuestion =
+    normalizeComparableValue(
+      question
+    );
+
+  if (
+    comparableRequirementNumber &&
+    comparableQuestion
+  ) {
+    const exactCompositeMatch =
+      availableControls.find(
         (control) =>
           normalizeComparableValue(
             getControlRequirementNumber(
               control
             )
           ) ===
-          comparableRequirementNumber
+            comparableRequirementNumber &&
+          normalizeComparableValue(
+            getControlQuestion(
+              control
+            )
+          ) ===
+            comparableQuestion
       );
 
-    if (requirementMatch) {
-      return requirementMatch;
+    if (exactCompositeMatch) {
+      return exactCompositeMatch;
     }
   }
 
-  const comparableQuestion =
-    normalizeComparableValue(
-      question
-    );
+  if (comparableQuestion) {
+    const questionMatch =
+      availableControls.find(
+        (control) =>
+          normalizeComparableValue(
+            getControlQuestion(
+              control
+            )
+          ) === comparableQuestion
+      );
 
-  if (!comparableQuestion) {
+    if (questionMatch) {
+      return questionMatch;
+    }
+  }
+
+  if (!comparableRequirementNumber) {
     return undefined;
   }
 
-  return safeExistingControls.find(
-    (control) =>
-      normalizeComparableValue(
-        getControlQuestion(control)
-      ) === comparableQuestion
-  );
+  const requirementMatches =
+    availableControls.filter(
+      (control) =>
+        normalizeComparableValue(
+          getControlRequirementNumber(
+            control
+          )
+        ) ===
+        comparableRequirementNumber
+    );
+
+  return requirementMatches.length === 1
+    ? requirementMatches[0]
+    : undefined;
 }
 
 // --------------------------------------------------
 // Stable control ID generation
 // --------------------------------------------------
 
+function createCompactHash(value) {
+  const text =
+    String(value ?? "");
+
+  let hash = 2166136261;
+
+  for (
+    let index = 0;
+    index < text.length;
+    index += 1
+  ) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(
+      hash,
+      16777619
+    );
+  }
+
+  return (
+    hash >>> 0
+  ).toString(36);
+}
+
+function createSlug(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9]+/g,
+      "-"
+    )
+    .replace(
+      /^-+|-+$/g,
+      ""
+    )
+    .slice(0, 48);
+}
+
 function createGoogleSheetControlId(
   requirementNumber,
   question,
   index
 ) {
-  const identifier =
-    normalizeText(
+  const requirementSlug =
+    createSlug(
       requirementNumber
     ) ||
-    normalizeText(question) ||
-    `row-${index + 1}`;
+    "requirement";
 
-  const normalizedIdentifier =
-    identifier
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9]+/g,
-        "-"
-      )
-      .replace(
-        /^-+|-+$/g,
-        ""
-      );
+  const identitySource = [
+    normalizeComparableValue(
+      requirementNumber
+    ),
+    normalizeComparableValue(
+      question
+    ),
+    String(index),
+  ].join("|");
 
-  return (
-    "sheet-control-" +
-    (normalizedIdentifier ||
-      `row-${index + 1}`)
-  );
+  return [
+    "sheet-control",
+    requirementSlug,
+    createCompactHash(
+      identitySource
+    ),
+  ].join("-");
 }
 
 // --------------------------------------------------
@@ -642,6 +716,9 @@ export function mapGoogleSheetRowsToControls(
       existingControls
     );
 
+  const usedExistingControls =
+    new Set();
+
   const normalizedFrameworkId =
     normalizeText(frameworkId);
 
@@ -713,8 +790,15 @@ export function mapGoogleSheetRowsToControls(
         findMatchingExistingControl(
           safeExistingControls,
           requirementNumber,
-          question
+          question,
+          usedExistingControls
         );
+
+      if (existingControl) {
+        usedExistingControls.add(
+          existingControl
+        );
+      }
 
       const mappedControl =
         mapGoogleSheetRowToControl(
