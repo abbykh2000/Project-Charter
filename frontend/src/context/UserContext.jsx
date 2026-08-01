@@ -15,17 +15,43 @@ import {
   hasSecureframeConfiguration,
 } from "../services/secureframeService";
 
-import { UserContext } from "./userContextValue";
+import {
+  UserContext,
+} from "./userContextValue";
+
+// --------------------------------------------------
+// Configuration helpers
+// --------------------------------------------------
+
+function isSecureframeDirectoryEnabled() {
+  return (
+    String(
+      import.meta.env
+        .VITE_ENABLE_SECUREFRAME_DIRECTORY ??
+        ""
+    )
+      .trim()
+      .toLowerCase() === "true"
+  );
+}
+
+// --------------------------------------------------
+// User helpers
+// --------------------------------------------------
 
 function getInitialUserId() {
-  const configuredUserId = String(
-    import.meta.env.VITE_CURRENT_USER_ID ?? ""
-  ).trim();
+  const configuredUserId =
+    String(
+      import.meta.env
+        .VITE_CURRENT_USER_ID ??
+        ""
+    ).trim();
 
   if (
     configuredUserId &&
     fallbackUsers.some(
-      (user) => user.id === configuredUserId
+      (user) =>
+        user.id === configuredUserId
     )
   ) {
     return configuredUserId;
@@ -34,57 +60,110 @@ function getInitialUserId() {
   return fallbackUsers[0]?.id ?? "";
 }
 
-function mergeDirectoryUsers(localUsers, externalUsers) {
-  const mergedUsers = new Map();
+function mergeDirectoryUsers(
+  localUsers,
+  externalUsers
+) {
+  const mergedUsers =
+    new Map();
 
-  [...localUsers, ...externalUsers].forEach((user) => {
-    const normalizedUser = normalizeDirectoryUser(user);
+  [
+    ...localUsers,
+    ...externalUsers,
+  ].forEach((user) => {
+    const normalizedUser =
+      normalizeDirectoryUser(
+        user
+      );
 
     if (!normalizedUser.id) {
       return;
     }
 
-    const existingUser = mergedUsers.get(normalizedUser.id);
+    const existingUser =
+      mergedUsers.get(
+        normalizedUser.id
+      );
 
-    mergedUsers.set(normalizedUser.id, {
-      ...existingUser,
-      ...normalizedUser,
-      role:
-        existingUser?.role ===
-        USER_ROLE_COMPLIANCE_MANAGER
-          ? existingUser.role
-          : normalizedUser.role,
-    });
+    mergedUsers.set(
+      normalizedUser.id,
+      {
+        ...existingUser,
+        ...normalizedUser,
+
+        role:
+          existingUser?.role ===
+          USER_ROLE_COMPLIANCE_MANAGER
+            ? existingUser.role
+            : normalizedUser.role,
+      }
+    );
   });
 
-  return Array.from(mergedUsers.values()).sort(
+  return Array.from(
+    mergedUsers.values()
+  ).sort(
     (first, second) =>
-      first.name.localeCompare(second.name)
+      first.name.localeCompare(
+        second.name
+      )
   );
 }
 
-export function UserProvider({ children }) {
-  const [directoryUsers, setDirectoryUsers] =
-    useState(fallbackUsers);
+// --------------------------------------------------
+// Provider
+// --------------------------------------------------
 
-  const [currentUserId, setCurrentUserId] =
-    useState(getInitialUserId);
+export function UserProvider({
+  children,
+}) {
+  const [
+    directoryUsers,
+    setDirectoryUsers,
+  ] = useState(fallbackUsers);
 
-  const [directoryLoading, setDirectoryLoading] =
-    useState(false);
+  const [
+    currentUserId,
+    setCurrentUserId,
+  ] = useState(getInitialUserId);
 
-  const [directoryError, setDirectoryError] =
-    useState("");
+  const [
+    directoryLoading,
+    setDirectoryLoading,
+  ] = useState(false);
 
-  const [directorySource, setDirectorySource] =
-    useState("local");
+  const [
+    directoryError,
+    setDirectoryError,
+  ] = useState("");
+
+  const [
+    directorySource,
+    setDirectorySource,
+  ] = useState("local");
 
   useEffect(() => {
-    if (!hasSecureframeConfiguration()) {
+    const directoryEnabled =
+      isSecureframeDirectoryEnabled();
+
+    /*
+     * Keep using the local fallback directory until
+     * Secureframe loading is explicitly enabled and
+     * the Secureframe service is configured.
+     *
+     * No state setters are needed here because the
+     * initial state already represents the local
+     * fallback directory.
+     */
+    if (
+      !directoryEnabled ||
+      !hasSecureframeConfiguration()
+    ) {
       return undefined;
     }
 
-    const controller = new AbortController();
+    const controller =
+      new AbortController();
 
     async function loadSecureframeDirectory() {
       try {
@@ -93,37 +172,63 @@ export function UserProvider({ children }) {
 
         const secureframeUsers =
           await fetchSecureframeUsers({
-            signal: controller.signal,
+            signal:
+              controller.signal,
           });
 
-        if (controller.signal.aborted) {
+        if (
+          controller.signal.aborted
+        ) {
           return;
         }
 
         setDirectoryUsers(
           mergeDirectoryUsers(
             fallbackUsers,
-            Array.isArray(secureframeUsers)
+
+            Array.isArray(
+              secureframeUsers
+            )
               ? secureframeUsers
               : []
           )
         );
-        setDirectorySource("secureframe");
+
+        setDirectorySource(
+          "secureframe"
+        );
       } catch (error) {
-        if (controller.signal.aborted) {
+        if (
+          controller.signal.aborted
+        ) {
           return;
         }
 
-        setDirectoryUsers(fallbackUsers);
-        setDirectorySource("local");
+        /*
+         * Preserve application availability by falling
+         * back to the local directory when Secureframe
+         * is unavailable.
+         */
+        setDirectoryUsers(
+          fallbackUsers
+        );
+
+        setDirectorySource(
+          "local"
+        );
+
         setDirectoryError(
           error instanceof Error
             ? error.message
             : "Unable to load the Secureframe user directory."
         );
       } finally {
-        if (!controller.signal.aborted) {
-          setDirectoryLoading(false);
+        if (
+          !controller.signal.aborted
+        ) {
+          setDirectoryLoading(
+            false
+          );
         }
       }
     }
@@ -137,21 +242,27 @@ export function UserProvider({ children }) {
 
   const currentUser =
     directoryUsers.find(
-      (user) => user.id === currentUserId
+      (user) =>
+        user.id === currentUserId
     ) ??
     directoryUsers[0] ??
     null;
 
-
-
   const value = useMemo(
     () => ({
-      users: directoryUsers,
+      users:
+        directoryUsers,
+
       currentUser,
+
       setCurrentUserId,
+
       directoryLoading,
+
       directoryError,
+
       directorySource,
+
       isComplianceManager:
         currentUser?.role ===
         USER_ROLE_COMPLIANCE_MANAGER,
@@ -166,7 +277,9 @@ export function UserProvider({ children }) {
   );
 
   return (
-    <UserContext.Provider value={value}>
+    <UserContext.Provider
+      value={value}
+    >
       {children}
     </UserContext.Provider>
   );
