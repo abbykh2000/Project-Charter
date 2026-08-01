@@ -14,6 +14,17 @@ import {
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
+const SORT_OPTIONS = {
+  REQUIREMENT_ASC: "requirement-asc",
+  REQUIREMENT_DESC: "requirement-desc",
+  CATEGORY_ASC: "category-asc",
+  CATEGORY_DESC: "category-desc",
+  OWNER_ASC: "owner-asc",
+  OWNER_DESC: "owner-desc",
+  STATUS_ASC: "status-asc",
+  STATUS_DESC: "status-desc",
+};
+
 function ControlsList({
   controls = [],
   framework,
@@ -23,6 +34,20 @@ function ControlsList({
 
   const [statusFilter, setStatusFilter] =
     useState("All");
+
+  const [categoryFilter, setCategoryFilter] =
+    useState("All");
+
+  const [ownerFilter, setOwnerFilter] =
+    useState("All");
+
+  const [evidenceFilter, setEvidenceFilter] =
+    useState("All");
+
+  const [sortOption, setSortOption] =
+    useState(
+      SORT_OPTIONS.REQUIREMENT_ASC
+    );
 
   const [pageSize, setPageSize] =
     useState(10);
@@ -46,6 +71,30 @@ function ControlsList({
         normalizeControl(item, index)
     );
   }, [controls, framework]);
+
+  const categoryOptions = useMemo(
+    () =>
+      getUniqueSortedValues(
+        normalizedControls.map(
+          (item) =>
+            item.category ||
+            "Uncategorized"
+        )
+      ),
+    [normalizedControls]
+  );
+
+  const ownerOptions = useMemo(
+    () =>
+      getUniqueSortedValues(
+        normalizedControls.map(
+          (item) =>
+            item.owner ||
+            "Unassigned"
+        )
+      ),
+    [normalizedControls]
+  );
 
   const filteredControls = useMemo(() => {
     const normalizedSearch =
@@ -72,26 +121,82 @@ function ControlsList({
               .includes(normalizedSearch)
           );
 
+        const displayedCategory =
+          item.category ||
+          "Uncategorized";
+
+        const displayedOwner =
+          item.owner ||
+          "Unassigned";
+
         const matchesStatus =
           statusFilter === "All" ||
           item.status === statusFilter;
 
+        const matchesCategory =
+          categoryFilter === "All" ||
+          displayedCategory ===
+            categoryFilter;
+
+        const matchesOwner =
+          ownerFilter === "All" ||
+          displayedOwner === ownerFilter;
+
+        const hasEvidence =
+          Boolean(
+            String(
+              item.evidenceUrl ?? ""
+            ).trim()
+          );
+
+        const matchesEvidence =
+          evidenceFilter === "All" ||
+          (
+            evidenceFilter ===
+              "With evidence" &&
+            hasEvidence
+          ) ||
+          (
+            evidenceFilter ===
+              "Without evidence" &&
+            !hasEvidence
+          );
+
         return (
           matchesSearch &&
-          matchesStatus
+          matchesStatus &&
+          matchesCategory &&
+          matchesOwner &&
+          matchesEvidence
         );
       }
     );
   }, [
+    categoryFilter,
+    evidenceFilter,
     normalizedControls,
+    ownerFilter,
     searchTerm,
     statusFilter,
   ]);
 
+  const sortedControls = useMemo(
+    () =>
+      sortControls(
+        filteredControls,
+        sortOption
+      ),
+    [
+      filteredControls,
+      sortOption,
+    ]
+  );
+
   const totalPages = Math.max(
     1,
     Math.ceil(
-      filteredControls.length / pageSize
+      sortedControls.length /
+        pageSize
     )
   );
 
@@ -102,20 +207,21 @@ function ControlsList({
 
   const visibleControls = useMemo(() => {
     const startIndex =
-      (safeCurrentPage - 1) * pageSize;
+      (safeCurrentPage - 1) *
+      pageSize;
 
-    return filteredControls.slice(
+    return sortedControls.slice(
       startIndex,
       startIndex + pageSize
     );
   }, [
     safeCurrentPage,
-    filteredControls,
     pageSize,
+    sortedControls,
   ]);
 
   const rangeStart =
-    filteredControls.length === 0
+    sortedControls.length === 0
       ? 0
       : (safeCurrentPage - 1) *
           pageSize +
@@ -123,18 +229,36 @@ function ControlsList({
 
   const rangeEnd = Math.min(
     safeCurrentPage * pageSize,
-    filteredControls.length
+    sortedControls.length
   );
 
   const hasActiveFilters =
     searchTerm.trim().length > 0 ||
-    statusFilter !== "All";
+    statusFilter !== "All" ||
+    categoryFilter !== "All" ||
+    ownerFilter !== "All" ||
+    evidenceFilter !== "All";
 
-  const clearFilters = () => {
+  function resetToFirstPage() {
+    setCurrentPage(1);
+  }
+
+  function clearFilters() {
     setSearchTerm("");
     setStatusFilter("All");
+    setCategoryFilter("All");
+    setOwnerFilter("All");
+    setEvidenceFilter("All");
     setCurrentPage(1);
-  };
+  }
+
+  function handleExportCsv() {
+    exportControlsToCsv(
+      sortedControls,
+      framework?.name ||
+        "framework-controls"
+    );
+  }
 
   return (
     <section style={sectionStyle}>
@@ -152,75 +276,271 @@ function ControlsList({
             {normalizedControls.length} total
             controls
             {hasActiveFilters
-              ? ` · ${filteredControls.length} visible`
+              ? ` · ${sortedControls.length} visible`
               : ""}
           </p>
         </div>
 
-        <div style={filterContainerStyle}>
-          <label style={fieldStyle}>
-            <span style={fieldLabelStyle}>
-              Search controls
-            </span>
-
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) => {
-                setSearchTerm(
-                  event.target.value
-                );
-                setCurrentPage(1);
-              }}
-              placeholder="Search by requirement, owner, category or question"
-              aria-label="Search controls"
-              style={searchInputStyle}
-            />
-          </label>
-
-          <label style={fieldStyle}>
-            <span style={fieldLabelStyle}>
-              Status
-            </span>
-
-            <select
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(
-                  event.target.value
-                );
-                setCurrentPage(1);
-              }}
-              aria-label="Filter controls by status"
-              style={filterSelectStyle}
-            >
-              <option value="All">
-                All statuses
-              </option>
-
-              {CONTROL_STATUSES.map(
-                (status) => (
-                  <option
-                    key={status}
-                    value={status}
-                  >
-                    {status}
-                  </option>
-                )
-              )}
-            </select>
-          </label>
-
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              style={clearButtonStyle}
-            >
-              Clear filters
-            </button>
-          )}
+        <div style={headerActionsStyle}>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={
+              sortedControls.length === 0
+            }
+            style={{
+              ...exportButtonStyle,
+              ...(sortedControls.length === 0
+                ? disabledButtonStyle
+                : {}),
+            }}
+          >
+            Export CSV
+          </button>
         </div>
+      </div>
+
+      <div style={filterPanelStyle}>
+        <label style={searchFieldStyle}>
+          <span style={fieldLabelStyle}>
+            Search controls
+          </span>
+
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            placeholder="Search by requirement, owner, category or question"
+            aria-label="Search controls"
+            style={searchInputStyle}
+          />
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>
+            Status
+          </span>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            aria-label="Filter controls by status"
+            style={filterSelectStyle}
+          >
+            <option value="All">
+              All statuses
+            </option>
+
+            {CONTROL_STATUSES.map(
+              (status) => (
+                <option
+                  key={status}
+                  value={status}
+                >
+                  {status}
+                </option>
+              )
+            )}
+          </select>
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>
+            Category
+          </span>
+
+          <select
+            value={categoryFilter}
+            onChange={(event) => {
+              setCategoryFilter(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            aria-label="Filter controls by category"
+            style={filterSelectStyle}
+          >
+            <option value="All">
+              All categories
+            </option>
+
+            {categoryOptions.map(
+              (category) => (
+                <option
+                  key={category}
+                  value={category}
+                >
+                  {category}
+                </option>
+              )
+            )}
+          </select>
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>
+            Owner
+          </span>
+
+          <select
+            value={ownerFilter}
+            onChange={(event) => {
+              setOwnerFilter(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            aria-label="Filter controls by owner"
+            style={filterSelectStyle}
+          >
+            <option value="All">
+              All owners
+            </option>
+
+            {ownerOptions.map(
+              (owner) => (
+                <option
+                  key={owner}
+                  value={owner}
+                >
+                  {owner}
+                </option>
+              )
+            )}
+          </select>
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>
+            Evidence
+          </span>
+
+          <select
+            value={evidenceFilter}
+            onChange={(event) => {
+              setEvidenceFilter(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            aria-label="Filter controls by evidence"
+            style={filterSelectStyle}
+          >
+            <option value="All">
+              All evidence
+            </option>
+
+            <option value="With evidence">
+              With evidence
+            </option>
+
+            <option value="Without evidence">
+              Without evidence
+            </option>
+          </select>
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={fieldLabelStyle}>
+            Sort
+          </span>
+
+          <select
+            value={sortOption}
+            onChange={(event) => {
+              setSortOption(
+                event.target.value
+              );
+              resetToFirstPage();
+            }}
+            aria-label="Sort controls"
+            style={sortSelectStyle}
+          >
+            <option
+              value={
+                SORT_OPTIONS.REQUIREMENT_ASC
+              }
+            >
+              REQ.No A–Z
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.REQUIREMENT_DESC
+              }
+            >
+              REQ.No Z–A
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.CATEGORY_ASC
+              }
+            >
+              Category A–Z
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.CATEGORY_DESC
+              }
+            >
+              Category Z–A
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.OWNER_ASC
+              }
+            >
+              Owner A–Z
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.OWNER_DESC
+              }
+            >
+              Owner Z–A
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.STATUS_ASC
+              }
+            >
+              Status A–Z
+            </option>
+
+            <option
+              value={
+                SORT_OPTIONS.STATUS_DESC
+              }
+            >
+              Status Z–A
+            </option>
+          </select>
+        </label>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            style={clearButtonStyle}
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {normalizedControls.length === 0 ? (
@@ -228,10 +548,10 @@ function ControlsList({
           title="No controls available"
           message="This framework does not currently contain any controls."
         />
-      ) : filteredControls.length === 0 ? (
+      ) : sortedControls.length === 0 ? (
         <EmptyState
           title="No matching controls"
-          message="Try changing your search or clearing the status filter."
+          message="Try changing your search or clearing one or more filters."
           actionLabel="Clear filters"
           onAction={clearFilters}
         />
@@ -299,7 +619,7 @@ function ControlsList({
           <div style={paginationStyle}>
             <div style={paginationSummaryStyle}>
               Showing {rangeStart}–{rangeEnd} of{" "}
-              {filteredControls.length}
+              {sortedControls.length}
             </div>
 
             <div style={paginationControlsStyle}>
@@ -431,7 +751,26 @@ function ControlRow({
         }}
       >
         <span
+          title="Click to copy requirement number"
           style={requirementNumberStyle}
+          role="button"
+          tabIndex={0}
+          onClick={() =>
+            copyToClipboard(
+              item.requirementNumber
+            )
+          }
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" ||
+              event.key === " "
+            ) {
+              event.preventDefault();
+              copyToClipboard(
+                item.requirementNumber
+              );
+            }
+          }}
         >
           {item.requirementNumber ||
             "—"}
@@ -562,6 +901,242 @@ function normalizeControl(
   };
 }
 
+function getUniqueSortedValues(
+  values
+) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) =>
+          String(value ?? "").trim()
+        )
+        .filter(Boolean)
+    )
+  ).sort((first, second) =>
+    first.localeCompare(
+      second,
+      undefined,
+      {
+        sensitivity: "base",
+        numeric: true,
+      }
+    )
+  );
+}
+
+function sortControls(
+  controls,
+  sortOption
+) {
+  const safeControls =
+    Array.isArray(controls)
+      ? [...controls]
+      : [];
+
+  const getSortValue = (item) => {
+    switch (sortOption) {
+      case SORT_OPTIONS.CATEGORY_ASC:
+      case SORT_OPTIONS.CATEGORY_DESC:
+        return item.category ||
+          "Uncategorized";
+
+      case SORT_OPTIONS.OWNER_ASC:
+      case SORT_OPTIONS.OWNER_DESC:
+        return item.owner ||
+          "Unassigned";
+
+      case SORT_OPTIONS.STATUS_ASC:
+      case SORT_OPTIONS.STATUS_DESC:
+        return item.status || "";
+
+      default:
+        return item.requirementNumber ||
+          "";
+    }
+  };
+
+  const descending = [
+    SORT_OPTIONS.REQUIREMENT_DESC,
+    SORT_OPTIONS.CATEGORY_DESC,
+    SORT_OPTIONS.OWNER_DESC,
+    SORT_OPTIONS.STATUS_DESC,
+  ].includes(sortOption);
+
+  return safeControls.sort(
+    (first, second) => {
+      const comparison =
+        String(
+          getSortValue(first)
+        ).localeCompare(
+          String(
+            getSortValue(second)
+          ),
+          undefined,
+          {
+            sensitivity: "base",
+            numeric: true,
+          }
+        );
+
+      return descending
+        ? -comparison
+        : comparison;
+    }
+  );
+}
+
+function escapeCsvValue(value) {
+  const stringValue =
+    String(value ?? "");
+
+  return `"${stringValue.replace(
+    /"/g,
+    '""'
+  )}"`;
+}
+
+function createCsvFilename(
+  frameworkName
+) {
+  const safeName =
+    String(
+      frameworkName ??
+      "framework-controls"
+    )
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]+/g,
+        "-"
+      )
+      .replace(
+        /^-+|-+$/g,
+        ""
+      ) ||
+    "framework-controls";
+
+  return `${safeName}-controls.csv`;
+}
+
+function exportControlsToCsv(
+  controls,
+  frameworkName
+) {
+  const header = [
+    "REQ.No",
+    "Category",
+    "Question",
+    "Owner",
+    "Status",
+    "Evidence",
+    "Comments",
+  ];
+
+  const rows = controls.map(
+    (item) => [
+      item.requirementNumber,
+      item.category ||
+        "Uncategorized",
+      item.question,
+      item.owner ||
+        "Unassigned",
+      item.status,
+      item.evidenceUrl,
+      item.comments,
+    ]
+  );
+
+  const csvContent = [
+    header,
+    ...rows,
+  ]
+    .map((row) =>
+      row
+        .map(escapeCsvValue)
+        .join(",")
+    )
+    .join("\r\n");
+
+  const blob = new Blob(
+    [
+      "\uFEFF",
+      csvContent,
+    ],
+    {
+      type:
+        "text/csv;charset=utf-8",
+    }
+  );
+
+  const objectUrl =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = objectUrl;
+  link.download =
+    createCsvFilename(
+      frameworkName
+    );
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(
+    objectUrl
+  );
+}
+
+async function copyToClipboard(
+  value
+) {
+  const normalizedValue =
+    String(value ?? "").trim();
+
+  if (!normalizedValue) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(
+      normalizedValue
+    );
+  } catch {
+    const textarea =
+      document.createElement(
+        "textarea"
+      );
+
+    textarea.value =
+      normalizedValue;
+
+    textarea.setAttribute(
+      "readonly",
+      ""
+    );
+
+    textarea.style.position =
+      "fixed";
+
+    textarea.style.opacity =
+      "0";
+
+    document.body.appendChild(
+      textarea
+    );
+
+    textarea.select();
+
+    document.execCommand(
+      "copy"
+    );
+
+    textarea.remove();
+  }
+}
+
 function EmptyState({
   title,
   message,
@@ -625,6 +1200,13 @@ const headerCopyStyle = {
   minWidth: "220px",
 };
 
+const headerActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
 const eyebrowStyle = {
   margin: "0 0 8px",
   color: "#2563eb",
@@ -649,16 +1231,22 @@ const subtitleStyle = {
   fontSize: "13px",
 };
 
-const filterContainerStyle = {
+const filterPanelStyle = {
   display: "flex",
   alignItems: "flex-end",
   gap: "10px",
   flexWrap: "wrap",
+  marginBottom: "22px",
 };
 
 const fieldStyle = {
   display: "grid",
   gap: "6px",
+};
+
+const searchFieldStyle = {
+  ...fieldStyle,
+  flex: "1 1 320px",
 };
 
 const fieldLabelStyle = {
@@ -670,7 +1258,7 @@ const fieldLabelStyle = {
 };
 
 const searchInputStyle = {
-  width: "min(390px, 72vw)",
+  width: "100%",
   minHeight: "42px",
   padding: "10px 12px",
   border: "1px solid #cbd5e1",
@@ -684,7 +1272,8 @@ const searchInputStyle = {
 };
 
 const filterSelectStyle = {
-  minWidth: "160px",
+  minWidth: "155px",
+  maxWidth: "220px",
   minHeight: "42px",
   padding: "10px 34px 10px 12px",
   border: "1px solid #cbd5e1",
@@ -697,6 +1286,11 @@ const filterSelectStyle = {
   boxSizing: "border-box",
 };
 
+const sortSelectStyle = {
+  ...filterSelectStyle,
+  minWidth: "170px",
+};
+
 const clearButtonStyle = {
   minHeight: "42px",
   padding: "10px 13px",
@@ -704,6 +1298,20 @@ const clearButtonStyle = {
   borderRadius: "9px",
   background: "#f8fafc",
   color: "#475569",
+  cursor: "pointer",
+  fontFamily,
+  fontSize: "12px",
+  fontWeight: "700",
+  whiteSpace: "nowrap",
+};
+
+const exportButtonStyle = {
+  minHeight: "40px",
+  padding: "9px 14px",
+  border: "1px solid #0f172a",
+  borderRadius: "9px",
+  background: "#0f172a",
+  color: "#ffffff",
   cursor: "pointer",
   fontFamily,
   fontSize: "12px",
@@ -815,6 +1423,7 @@ const requirementNumberStyle = {
   borderRadius: "6px",
   background: "#f8fafc",
   color: "#475569",
+  cursor: "copy",
   fontSize: "11px",
   fontWeight: "750",
   whiteSpace: "nowrap",

@@ -10,7 +10,6 @@ import {
 } from "../services/customFrameworkService";
 
 import {
-  getControlStatusStyle,
   getFrameworkStatusStyle,
 } from "../utils/statusUtils";
 
@@ -21,6 +20,8 @@ import {
   getComplianceMessage,
   getPercentageText,
 } from "../utils/formatUtils";
+
+import ControlsList from "../components/ControlsList";
 
 function CustomFrameworkDetail() {
   const { id } = useParams();
@@ -574,227 +575,10 @@ function CustomFrameworkDetail() {
         </div>
       </section>
 
-      <section style={sectionCardStyle}>
-        <div style={sectionHeadingRowStyle}>
-          <div>
-            <p style={sectionEyebrowStyle}>
-              Requirements
-            </p>
-
-            <h2 style={sectionTitleStyle}>
-              Controls
-            </h2>
-
-            <p style={sectionDescriptionStyle}>
-              Review each requirement, its
-              category, owner, status, evidence,
-              and comments.
-            </p>
-          </div>
-
-          <span style={controlCountStyle}>
-            {total}{" "}
-            {total === 1
-              ? "control"
-              : "controls"}
-          </span>
-        </div>
-
-        {controls.length === 0 ? (
-          <div style={emptyStateStyle}>
-            <h3 style={emptyStateTitleStyle}>
-              No controls available
-            </h3>
-
-            <p style={emptyStateTextStyle}>
-              This framework does not currently
-              contain any controls.
-            </p>
-          </div>
-        ) : (
-          <div style={tableContainerStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <TableHeader>
-                    REQ.No
-                  </TableHeader>
-
-                  <TableHeader>
-                    Category
-                  </TableHeader>
-
-                  <TableHeader>
-                    Question
-                  </TableHeader>
-
-                  <TableHeader>
-                    Owner
-                  </TableHeader>
-
-                  <TableHeader>
-                    Status
-                  </TableHeader>
-
-                  <TableHeader>
-                    Evidence
-                  </TableHeader>
-
-                  <TableHeader>
-                    Comments
-                  </TableHeader>
-                </tr>
-              </thead>
-
-              <tbody>
-                {controls.map(
-                  (control, index) => {
-                    const requirementNumber =
-                      control.requirementNumber ??
-                      control.reqNo ??
-                      control.requirementNo ??
-                      control["REQ.No"] ??
-                      "";
-
-                    const question =
-                      control.question ??
-                      control.control ??
-                      control.requirement ??
-                      "";
-
-                    const comments =
-                      control.comments ??
-                      control.notes ??
-                      "";
-
-                    const evidenceUrl =
-                      control.evidenceUrl ??
-                      control.evidence ??
-                      "";
-
-                    const rowKey =
-                      control.id ||
-                      `${requirementNumber}-${index}`;
-
-                    return (
-                      <tr key={rowKey}>
-                        <TableCell>
-                          <span
-                            style={
-                              requirementNumberStyle
-                            }
-                          >
-                            {requirementNumber ||
-                              "—"}
-                          </span>
-                        </TableCell>
-
-                        <TableCell>
-                          <span
-                            style={
-                              categoryStyle
-                            }
-                          >
-                            {control.category ||
-                              "General"}
-                          </span>
-                        </TableCell>
-
-                        <TableCell>
-                          <div
-                            style={
-                              controlNameWrapperStyle
-                            }
-                          >
-                            <strong
-                              style={
-                                controlNameStyle
-                              }
-                            >
-                              {question ||
-                                "No question provided"}
-                            </strong>
-
-                            {control.description && (
-                              <p
-                                style={
-                                  controlDescriptionStyle
-                                }
-                              >
-                                {
-                                  control.description
-                                }
-                              </p>
-                            )}
-                          </div>
-                        </TableCell>
-
-                        <TableCell>
-                          {control.owner ||
-                            "Not assigned"}
-                        </TableCell>
-
-                        <TableCell>
-                          <StatusBadge
-                            status={
-                              control.status
-                            }
-                          />
-                        </TableCell>
-
-                        <TableCell>
-                          {evidenceUrl ? (
-                            <a
-                              href={
-                                evidenceUrl
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={
-                                evidenceLinkStyle
-                              }
-                            >
-                              View Evidence
-
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  fontSize:
-                                    "13px",
-                                }}
-                              >
-                                ↗
-                              </span>
-                            </a>
-                          ) : (
-                            <span
-                              style={
-                                noEvidenceStyle
-                              }
-                            >
-                              No evidence
-                            </span>
-                          )}
-                        </TableCell>
-
-                        <TableCell>
-                          <span
-                            style={
-                              commentsStyle
-                            }
-                          >
-                            {comments || "—"}
-                          </span>
-                        </TableCell>
-                      </tr>
-                    );
-                  }
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <ControlsList
+        framework={framework}
+        controls={controls}
+      />
 
       <section style={noticeCardStyle}>
         <div style={noticeIconStyle}>
@@ -1039,54 +823,6 @@ function InformationItem({
   );
 }
 
-function StatusBadge({ status }) {
-  const displayedStatus =
-    status || "Not Started";
-
-  return (
-    <span
-      style={getControlStatusStyle(
-        displayedStatus
-      )}
-    >
-      {displayedStatus}
-    </span>
-  );
-}
-
-function TableHeader({
-  children,
-  align = "left",
-}) {
-  return (
-    <th
-      scope="col"
-      style={{
-        ...tableHeaderStyle,
-        textAlign: align,
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function TableCell({
-  children,
-  align = "left",
-}) {
-  return (
-    <td
-      style={{
-        ...tableCellStyle,
-        textAlign: align,
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
 function StateCard({
   title,
   message,
@@ -1288,13 +1024,6 @@ const sectionTitleStyle = {
   letterSpacing: "-0.02em",
 };
 
-const sectionDescriptionStyle = {
-  margin: "8px 0 0",
-  color: "#64748b",
-  fontSize: "14px",
-  lineHeight: 1.6,
-};
-
 const informationGridStyle = {
   display: "grid",
   gridTemplateColumns:
@@ -1322,138 +1051,6 @@ const informationValueStyle = {
   overflowWrap: "anywhere",
 };
 
-const controlCountStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "7px 11px",
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  borderRadius: "999px",
-  fontSize: "13px",
-  fontWeight: "700",
-  whiteSpace: "nowrap",
-};
-
-const tableContainerStyle = {
-  width: "100%",
-  overflowX: "auto",
-  border: "1px solid #e2e8f0",
-  borderRadius: "12px",
-};
-
-const tableStyle = {
-  width: "100%",
-  minWidth: "1250px",
-  borderCollapse: "collapse",
-  background: "#ffffff",
-};
-
-const tableHeaderStyle = {
-  padding: "14px 18px",
-  background: "#f8fafc",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#475569",
-  fontSize: "12px",
-  fontWeight: "700",
-  letterSpacing: "0.035em",
-  textTransform: "uppercase",
-  whiteSpace: "nowrap",
-};
-
-const tableCellStyle = {
-  padding: "18px",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#334155",
-  fontSize: "14px",
-  lineHeight: 1.5,
-  verticalAlign: "middle",
-};
-
-const requirementNumberStyle = {
-  display: "inline-block",
-  minWidth: "58px",
-  color: "#0f172a",
-  fontSize: "13px",
-  fontWeight: "700",
-  whiteSpace: "nowrap",
-};
-
-const controlNameWrapperStyle = {
-  minWidth: "260px",
-  maxWidth: "420px",
-};
-
-const controlNameStyle = {
-  display: "block",
-  color: "#0f172a",
-  fontSize: "14px",
-  fontWeight: "700",
-};
-
-const controlDescriptionStyle = {
-  margin: "5px 0 0",
-  color: "#64748b",
-  fontSize: "13px",
-  lineHeight: 1.5,
-};
-
-const categoryStyle = {
-  display: "inline-flex",
-  padding: "5px 9px",
-  background: "#f1f5f9",
-  color: "#475569",
-  borderRadius: "6px",
-  fontSize: "12px",
-  fontWeight: "600",
-  whiteSpace: "nowrap",
-};
-
-const evidenceLinkStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "6px",
-  color: "#2563eb",
-  textDecoration: "none",
-  fontSize: "13px",
-  fontWeight: "700",
-  whiteSpace: "nowrap",
-};
-
-const noEvidenceStyle = {
-  color: "#94a3b8",
-  fontSize: "13px",
-  whiteSpace: "nowrap",
-};
-
-const commentsStyle = {
-  display: "block",
-  minWidth: "180px",
-  maxWidth: "300px",
-  color: "#475569",
-  fontSize: "13px",
-  lineHeight: 1.55,
-  overflowWrap: "anywhere",
-};
-
-const emptyStateStyle = {
-  padding: "52px 20px",
-  background: "#f8fafc",
-  border: "1px dashed #cbd5e1",
-  borderRadius: "12px",
-  textAlign: "center",
-};
-
-const emptyStateTitleStyle = {
-  margin: "0 0 8px",
-  color: "#0f172a",
-  fontSize: "18px",
-};
-
-const emptyStateTextStyle = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: "14px",
-};
 
 const noticeCardStyle = {
   display: "flex",
