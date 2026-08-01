@@ -987,6 +987,14 @@ export async function refreshCustomFrameworkFromGoogleSheet(
         frameworkForRefresh,
         {
           controls: refreshedControls,
+
+          /*
+           * Google Sheets refreshes must preserve the
+           * dashboard-managed owner, status, evidence,
+           * comments and other operational values.
+           */
+          preserveDashboardManagedFields:
+            true,
         }
       );
 

@@ -560,6 +560,11 @@ function mergeGoogleSheetControl(
       existingControl.sourceRowNumber ??
       null,
 
+    /*
+     * This function is used only for Google Sheets
+     * refreshes. Dashboard-managed values therefore
+     * remain sourced from the existing saved control.
+     */
     owner:
       getOwner(existingControl) ||
       getOwner(incomingControl) ||
@@ -568,7 +573,8 @@ function mergeGoogleSheetControl(
     status:
       normalizeControlStatus(
         existingControl.status ??
-          incomingControl.status
+          incomingControl.status ??
+          DEFAULT_CONTROL_STATUS
       ),
 
     evidenceUrl:
@@ -602,7 +608,7 @@ function normalizeUpdatedControls({
   incomingControls,
   existingControls,
   frameworkId,
-  source,
+  preserveDashboardManagedFields = false,
 }) {
   const safeIncomingControls =
     getControlsArray(
@@ -623,7 +629,7 @@ function normalizeUpdatedControls({
         );
 
       const mergedControl =
-        isGoogleSheetsSource(source)
+        preserveDashboardManagedFields
           ? mergeGoogleSheetControl(
               incomingControl,
               existingControl
@@ -1056,11 +1062,6 @@ export function updateFramework(
     },
   };
 
-  const source =
-    getFrameworkSource(
-      mergedFrameworkInput
-    );
-
   const controlsWereProvided =
     Array.isArray(
       safeFrameworkInput.controls
@@ -1081,7 +1082,15 @@ export function updateFramework(
       frameworkId:
         existingFramework.id,
 
-      source,
+      /*
+       * Manual saves use incoming dashboard-managed
+       * values. Google Sheets refreshes opt in to
+       * preservation explicitly through this flag.
+       */
+      preserveDashboardManagedFields:
+        safeFrameworkInput
+          .preserveDashboardManagedFields ===
+        true,
     });
 
   const timestamp =
