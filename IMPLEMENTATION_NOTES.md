@@ -6,8 +6,6 @@
 - `REQ.No`, `Category`, and `Question` are read-only after framework creation.
 - The factory/service layer also preserves those three fields during normal dashboard updates, so direct UI bypasses cannot alter them.
 - Owner, Status, Evidence URL, Comments, and supporting Description remain editable.
-- SOC 2 and PCI DSS fallback frameworks were removed.
-- ISO/IEC 42001 was added alongside ISO/IEC 27001.
 - Google Sheets refresh now calls the real refresh service, recalculates framework summaries, records sync timestamps/errors, and preserves operational fields.
 - A Secureframe client and credential-safe backend proxy are included.
 
