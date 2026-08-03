@@ -1,7 +1,5 @@
 # Compliance Dashboard implementation notes
 
-## Manager feedback implemented
-
 - Only the Compliance Manager role can create, edit, delete, or refresh custom frameworks.
 - Direct access to custom-framework create and edit routes is protected.
 - Framework managers and control owners are selected from the dashboard user directory.
@@ -38,4 +36,4 @@ The exact framework/control endpoint availability and response relationships mus
 - `npm run lint` passes after the final changes.
 - All local imports resolve with exact Linux-sensitive casing.
 - The backend proxy passes Node syntax validation.
-- A Vite production build was attempted. The supplied dependency archive contains a platform-specific Rolldown installation and the execution environment’s npm mirror does not provide the required Linux optional binding. Run `npm install`, `npm run lint`, and `npm run build` on the target development machine to complete the platform-specific build check.
+
