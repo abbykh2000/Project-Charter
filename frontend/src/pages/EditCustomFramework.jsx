@@ -61,21 +61,6 @@ function normalizeLowercase(value) {
   return normalizeText(value).toLowerCase();
 }
 
-function normalizeHeaderRow(value) {
-  const parsedValue =
-    Number.parseInt(
-      String(value ?? ""),
-      10
-    );
-
-  return Number.isInteger(
-    parsedValue
-  ) &&
-    parsedValue >= 1
-    ? parsedValue
-    : 1;
-}
-
 function normalizeControlForEditing(
   control
 ) {
@@ -151,15 +136,6 @@ function getGoogleSheetConfiguration(
         legacyGoogleIntegration?.sheetName
     ),
 
-    headerRow:
-      normalizeHeaderRow(
-        googleSheet?.headerRow ??
-          framework?.headerRow ??
-          legacyGoogleWorkspace?.headerRow ??
-          legacyGoogleIntegration?.headerRow ??
-          1
-      ),
-
     defaultCategory: normalizeText(
       googleSheet?.defaultCategory ??
         framework?.defaultCategory ??
@@ -178,6 +154,22 @@ function getGoogleSheetConfiguration(
       question: normalizeText(
         columnMapping?.question ??
           "Question"
+      ),
+      owner: normalizeText(
+        columnMapping?.owner ??
+          "Owner"
+      ),
+      status: normalizeText(
+        columnMapping?.status ??
+          "Status"
+      ),
+      evidenceUrl: normalizeText(
+        columnMapping?.evidenceUrl ??
+          "Evidence"
+      ),
+      comments: normalizeText(
+        columnMapping?.comments ??
+          "Comments"
       ),
     },
 
@@ -351,26 +343,6 @@ function getAdditionalValidationError({
       );
     }
 
-    const headerRow =
-      Number.parseInt(
-        String(
-          googleSheet?.headerRow ??
-            ""
-        ),
-        10
-      );
-
-    if (
-      !Number.isInteger(
-        headerRow
-      ) ||
-      headerRow < 1
-    ) {
-      return (
-        "Header Row must be a whole number greater than or equal to 1."
-      );
-    }
-
     if (
       normalizeText(
         googleSheet
@@ -441,12 +413,15 @@ function EditCustomFramework() {
     spreadsheetId: "",
     spreadsheetUrl: "",
     sheetName: "",
-    headerRow: 1,
     defaultCategory: "General",
     columnMapping: {
       requirementNumber: "REQ.No",
       category: "Category",
       question: "Question",
+      owner: "Owner",
+      status: "Status",
+      evidenceUrl: "Evidence",
+      comments: "Comments",
     },
     lastSyncedAt: null,
     syncStatus: "",
@@ -725,14 +700,6 @@ function EditCustomFramework() {
       return;
     }
 
-    if (!isComplianceManager) {
-      setError(
-        "Only a Compliance Manager can refresh Google Sheets controls."
-      );
-
-      return;
-    }
-
     if (
       !isGoogleSheetFramework
     ) {
@@ -751,9 +718,7 @@ function EditCustomFramework() {
       });
 
     if (configurationError) {
-      setError(
-        configurationError
-      );
+      setError(configurationError);
 
       window.scrollTo({
         top: 0,
@@ -766,7 +731,7 @@ function EditCustomFramework() {
     if (isDirty) {
       const shouldContinue =
         window.confirm(
-          "Refresh will use and save the current Google Sheets configuration, then replace control definitions with the latest worksheet data. Unsaved Owner, Status, Evidence, Comments, or Description changes may be lost. Continue?"
+          "Refresh will import the latest controls from Google Sheets. Save your current changes first to avoid losing unsaved control edits. Continue anyway?"
         );
 
       if (!shouldContinue) {
@@ -780,26 +745,47 @@ function EditCustomFramework() {
       setSuccessMessage("");
 
       /*
-       * Pass the current Google Sheets configuration
-       * directly to the refresh service. This prevents
-       * the service from using an older saved mapping,
-       * such as the default Question column.
+       * Save the current integration settings first,
+       * because the refresh service reads the stored
+       * framework configuration.
        */
-      const refreshedFramework =
-        await refreshCustomFrameworkFromGoogleSheet(
+      const savedFramework =
+        await updateCustomFramework(
           id,
-          googleSheet
+          {
+            ...formData,
+
+            sourceType:
+              GOOGLE_SHEETS_SOURCE,
+
+            integrationType:
+              INTEGRATION_TYPE_GOOGLE_SHEETS,
+
+            googleSheet: {
+              ...googleSheet,
+            },
+
+            // Flat aliases remain until the service layer
+            // is fully migrated to nested metadata.
+            spreadsheetId:
+              googleSheet.spreadsheetId,
+            spreadsheetUrl:
+              googleSheet.spreadsheetUrl,
+            sheetName:
+              googleSheet.sheetName,
+
+            controls,
+          }
         );
 
-      if (!refreshedFramework) {
-        throw new Error(
-          "The custom framework could not be refreshed."
+      const refreshedFramework =
+        await refreshCustomFrameworkFromGoogleSheet(
+          savedFramework.id
         );
-      }
 
       const refreshedControls =
         Array.isArray(
-          refreshedFramework.controls
+          refreshedFramework?.controls
         )
           ? refreshedFramework.controls.map(
               normalizeControlForEditing
@@ -818,45 +804,10 @@ function EditCustomFramework() {
         )
       );
 
-      /*
-       * Keep current framework-level edits visible.
-       * Refresh owns the Google Sheets configuration
-       * and imported controls only.
-       */
-      setFormData((current) => ({
-        ...current,
-
-        name:
-          refreshedFramework.name ||
-          current.name,
-
-        description:
-          refreshedFramework.description ??
-          current.description,
-
-        department:
-          refreshedFramework.department ??
-          current.department,
-
-        owner:
-          refreshedFramework.owner ??
-          current.owner,
-
-        reviewFrequency:
-          refreshedFramework.reviewFrequency ||
-          current.reviewFrequency ||
-          DEFAULT_REVIEW_FREQUENCY,
-
-        frameworkStatus:
-          refreshedFramework.frameworkStatus ||
-          current.frameworkStatus ||
-          DEFAULT_FRAMEWORK_STATUS,
-      }));
-
       setIsDirty(false);
 
       setSuccessMessage(
-        "The framework controls and Google Sheets configuration were refreshed successfully."
+        "The framework controls were refreshed successfully from Google Sheets."
       );
 
       window.scrollTo({
@@ -969,6 +920,22 @@ function EditCustomFramework() {
                     ...googleSheet,
                     syncStatus: "",
                   },
+
+            // Flat aliases remain until the service layer
+            // is fully migrated to nested metadata.
+            spreadsheetId:
+              integrationType === INTEGRATION_TYPE_GOOGLE_SHEETS
+                ? googleSheet.spreadsheetId
+                : "",
+            spreadsheetUrl:
+              integrationType === INTEGRATION_TYPE_GOOGLE_SHEETS
+                ? googleSheet.spreadsheetUrl
+                : "",
+            sheetName:
+              integrationType === INTEGRATION_TYPE_GOOGLE_SHEETS
+                ? googleSheet.sheetName
+                : "",
+
             controls,
           }
         );
@@ -1468,31 +1435,6 @@ function EditCustomFramework() {
                 />
               </FormField>
 
-              <FormField
-                label="Header Row"
-                required
-              >
-                <input
-                  type="number"
-                  name="headerRow"
-                  min="1"
-                  step="1"
-                  value={
-                    googleSheet.headerRow
-                  }
-                  onChange={
-                    handleGoogleSheetChange
-                  }
-                  style={inputStyle}
-                  placeholder="1"
-                  disabled={actionsDisabled}
-                />
-
-                <span style={helperTextStyle}>
-                  Enter the worksheet row containing the actual column headings.
-                </span>
-              </FormField>
-
               <FormField label="Spreadsheet URL">
                 <input
                   type="url"
@@ -1558,12 +1500,58 @@ function EditCustomFramework() {
                 <input
                   type="text"
                   name="columnMapping.question"
-                  value={
-                    googleSheet.columnMapping.question
-                  }
+                  value={googleSheet.columnMapping.question}
                   onChange={handleGoogleSheetChange}
                   style={inputStyle}
                   placeholder="Question"
+                  disabled={actionsDisabled}
+                />
+              </FormField>
+
+              <FormField label="Owner Column">
+                <input
+                  type="text"
+                  name="columnMapping.owner"
+                  value={googleSheet.columnMapping.owner}
+                  onChange={handleGoogleSheetChange}
+                  style={inputStyle}
+                  placeholder="Owner FY25"
+                  disabled={actionsDisabled}
+                />
+              </FormField>
+
+              <FormField label="Status Column">
+                <input
+                  type="text"
+                  name="columnMapping.status"
+                  value={googleSheet.columnMapping.status}
+                  onChange={handleGoogleSheetChange}
+                  style={inputStyle}
+                  placeholder="Company AI Status"
+                  disabled={actionsDisabled}
+                />
+              </FormField>
+
+              <FormField label="Evidence Column">
+                <input
+                  type="text"
+                  name="columnMapping.evidenceUrl"
+                  value={googleSheet.columnMapping.evidenceUrl}
+                  onChange={handleGoogleSheetChange}
+                  style={inputStyle}
+                  placeholder="Evidence"
+                  disabled={actionsDisabled}
+                />
+              </FormField>
+
+              <FormField label="Comments Column">
+                <input
+                  type="text"
+                  name="columnMapping.comments"
+                  value={googleSheet.columnMapping.comments}
+                  onChange={handleGoogleSheetChange}
+                  style={inputStyle}
+                  placeholder="Comments"
                   disabled={actionsDisabled}
                 />
               </FormField>
@@ -1578,14 +1566,16 @@ function EditCustomFramework() {
               title="Framework Controls"
               description={
                 isGoogleSheetFramework
-                  ? "Manage controls in the dashboard or explicitly refresh them from Google Sheets. Google Sheets synchronization does not make the framework read-only."
+                  ? "Controls are read-only and fully sourced from Google Sheets. Update the worksheet, then refresh this framework."
                   : "Add, remove, and update the operational controls maintained by this framework."
               }
               noBorder
             />
 
             <span style={fixedFieldsNoticeStyle}>
-              REQ.No, Category, and Question are fixed.
+              {isGoogleSheetFramework
+                ? "All control fields are read-only."
+                : "REQ.No, Category, and Question are fixed."}
             </span>
           </div>
 
@@ -1599,7 +1589,10 @@ function EditCustomFramework() {
                   }
                   control={control}
                   index={index}
-                  disabled={actionsDisabled}
+                  disabled={
+                    actionsDisabled ||
+                    isGoogleSheetFramework
+                  }
                   users={users}
                   onChange={handleControlChange}
                 />

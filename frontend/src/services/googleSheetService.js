@@ -3,6 +3,11 @@ import {
 } from "../adapters/googleSheetMapper";
 
 import {
+  getGoogleSheetsAccessToken,
+  isGoogleOAuthConfigured,
+} from "./googleOAuthService";
+
+import {
   getGoogleSheetColumnValidationError,
   getGoogleSheetRowWarnings,
   validateGoogleSheetColumns,
@@ -23,6 +28,10 @@ export const CANONICAL_COLUMNS =
     REQUIREMENT_NUMBER: "REQ.No",
     CATEGORY: "Category",
     QUESTION: "Question",
+    OWNER: "Owner",
+    STATUS: "Status",
+    EVIDENCE_URL: "Evidence",
+    COMMENTS: "Comments",
   });
 
 export const DEFAULT_COLUMN_MAPPING =
@@ -35,6 +44,18 @@ export const DEFAULT_COLUMN_MAPPING =
 
     question:
       CANONICAL_COLUMNS.QUESTION,
+
+    owner:
+      CANONICAL_COLUMNS.OWNER,
+
+    status:
+      CANONICAL_COLUMNS.STATUS,
+
+    evidenceUrl:
+      CANONICAL_COLUMNS.EVIDENCE_URL,
+
+    comments:
+      CANONICAL_COLUMNS.COMMENTS,
   });
 
 // --------------------------------------------------
@@ -49,21 +70,6 @@ function normalizeLowercase(value) {
   return normalizeText(
     value
   ).toLowerCase();
-}
-
-function normalizeHeaderRow(value) {
-  const parsedValue =
-    Number.parseInt(
-      String(value ?? ""),
-      10
-    );
-
-  return Number.isInteger(
-    parsedValue
-  ) &&
-    parsedValue >= 1
-    ? parsedValue
-    : 1;
 }
 
 /**
@@ -106,6 +112,36 @@ function getGoogleSheetsApiKey() {
   );
 }
 
+async function getGoogleSheetsRequestCredentials() {
+  if (isGoogleOAuthConfigured()) {
+    return {
+      accessToken:
+        await getGoogleSheetsAccessToken(),
+      apiKey: "",
+    };
+  }
+
+  const apiKey =
+    getGoogleSheetsApiKey();
+
+  if (apiKey) {
+    return {
+      accessToken: "",
+      apiKey,
+    };
+  }
+
+  throw createServiceError(
+    `Google Sheets integration requires VITE_GOOGLE_OAUTH_CLIENT_ID for restricted sheets or ${GOOGLE_SHEETS_API_KEY_ENV_NAME} for public sheets.`,
+    {
+      name:
+        "GoogleSheetsNotConfiguredError",
+      code:
+        "GOOGLE_SHEETS_NOT_CONFIGURED",
+    }
+  );
+}
+
 function escapeSheetName(sheetName) {
   return normalizeText(
     sheetName
@@ -124,7 +160,7 @@ function createWorksheetRange(
 function createValuesApiUrl({
   spreadsheetId,
   sheetName,
-  apiKey,
+  apiKey = "",
 }) {
   const range =
     createWorksheetRange(
@@ -139,15 +175,23 @@ function createValuesApiUrl({
   const encodedRange =
     encodeURIComponent(range);
 
-  const encodedApiKey =
-    encodeURIComponent(apiKey);
+  const queryParameters =
+    new URLSearchParams({
+      majorDimension: "ROWS",
+    });
+
+  if (apiKey) {
+    queryParameters.set(
+      "key",
+      apiKey
+    );
+  }
 
   return (
     `${GOOGLE_SHEETS_API_BASE_URL}/` +
     `${encodedSpreadsheetId}/values/` +
-    `${encodedRange}` +
-    `?majorDimension=ROWS` +
-    `&key=${encodedApiKey}`
+    `${encodedRange}?` +
+    queryParameters.toString()
   );
 }
 
@@ -226,6 +270,30 @@ function normalizeColumnMapping(
       ) ||
       DEFAULT_COLUMN_MAPPING
         .question,
+
+    owner:
+      normalizeText(
+        safeMapping.owner
+      ) ||
+      DEFAULT_COLUMN_MAPPING.owner,
+
+    status:
+      normalizeText(
+        safeMapping.status
+      ) ||
+      DEFAULT_COLUMN_MAPPING.status,
+
+    evidenceUrl:
+      normalizeText(
+        safeMapping.evidenceUrl
+      ) ||
+      DEFAULT_COLUMN_MAPPING.evidenceUrl,
+
+    comments:
+      normalizeText(
+        safeMapping.comments
+      ) ||
+      DEFAULT_COLUMN_MAPPING.comments,
   };
 }
 
@@ -292,10 +360,38 @@ function getMappedColumnConfiguration({
         )
       : "";
 
+  const ownerColumn =
+    findMatchingColumn(
+      columns,
+      normalizedMapping.owner
+    );
+
+  const statusColumn =
+    findMatchingColumn(
+      columns,
+      normalizedMapping.status
+    );
+
+  const evidenceUrlColumn =
+    findMatchingColumn(
+      columns,
+      normalizedMapping.evidenceUrl
+    );
+
+  const commentsColumn =
+    findMatchingColumn(
+      columns,
+      normalizedMapping.comments
+    );
+
   return {
     requirementNumberColumn,
     questionColumn,
     categoryColumn,
+    ownerColumn,
+    statusColumn,
+    evidenceUrlColumn,
+    commentsColumn,
 
     configuredRequirementNumberColumn:
       normalizedMapping
@@ -306,6 +402,18 @@ function getMappedColumnConfiguration({
 
     configuredCategoryColumn:
       normalizedMapping.category,
+
+    configuredOwnerColumn:
+      normalizedMapping.owner,
+
+    configuredStatusColumn:
+      normalizedMapping.status,
+
+    configuredEvidenceUrlColumn:
+      normalizedMapping.evidenceUrl,
+
+    configuredCommentsColumn:
+      normalizedMapping.comments,
 
     defaultCategory:
       normalizeText(
@@ -459,6 +567,12 @@ function mapRowsToCanonicalSchema({
       columnConfiguration
         .defaultCategory;
 
+    const getOptionalValue =
+      (columnName) =>
+        columnName
+          ? safeRow[columnName] ?? ""
+          : "";
+
     return {
       ...safeRow,
 
@@ -471,6 +585,26 @@ function mapRowsToCanonicalSchema({
 
       [CANONICAL_COLUMNS.QUESTION]:
         question ?? "",
+
+      [CANONICAL_COLUMNS.OWNER]:
+        getOptionalValue(
+          columnConfiguration.ownerColumn
+        ),
+
+      [CANONICAL_COLUMNS.STATUS]:
+        getOptionalValue(
+          columnConfiguration.statusColumn
+        ),
+
+      [CANONICAL_COLUMNS.EVIDENCE_URL]:
+        getOptionalValue(
+          columnConfiguration.evidenceUrlColumn
+        ),
+
+      [CANONICAL_COLUMNS.COMMENTS]:
+        getOptionalValue(
+          columnConfiguration.commentsColumn
+        ),
     };
   });
 }
@@ -487,7 +621,6 @@ export async function fetchGoogleSheetControls({
   columnMapping =
     DEFAULT_COLUMN_MAPPING,
   defaultCategory = "",
-  headerRow = 1,
   signal,
 } = {}) {
 
@@ -500,30 +633,11 @@ export async function fetchGoogleSheetControls({
     existingControls
   );
 
-  const apiKey =
-    getGoogleSheetsApiKey();
-
-  if (!apiKey) {
-    throw createServiceError(
-      `Google Sheets integration is missing ${GOOGLE_SHEETS_API_KEY_ENV_NAME}.`,
-      {
-        name:
-          "GoogleSheetsNotConfiguredError",
-
-        code:
-          "GOOGLE_SHEETS_NOT_CONFIGURED",
-
-        operation:
-          "fetch controls",
-
-        context: {
-          spreadsheetId,
-          sheetName,
-          frameworkId,
-        },
-      }
-    );
-  }
+  const {
+    accessToken,
+    apiKey,
+  } =
+    await getGoogleSheetsRequestCredentials();
 
   const values =
     await fetchGoogleSheetValues({
@@ -538,18 +652,13 @@ export async function fetchGoogleSheetControls({
         ),
 
       apiKey,
+      accessToken,
       signal,
     });
 
-  const normalizedHeaderRow =
-    normalizeHeaderRow(
-      headerRow
-    );
-
   const rows =
     convertValuesToRows(
-      values,
-      normalizedHeaderRow
+      values
     );
 
   const result =
@@ -559,9 +668,6 @@ export async function fetchGoogleSheetControls({
       frameworkId,
       columnMapping,
       defaultCategory,
-
-      headerRow:
-        normalizedHeaderRow,
     });
 
   return result.controls;
@@ -575,7 +681,6 @@ export async function fetchGoogleSheetControlResult({
   columnMapping =
     DEFAULT_COLUMN_MAPPING,
   defaultCategory = "",
-  headerRow = 1,
   signal,
 } = {}) {
   
@@ -588,30 +693,11 @@ export async function fetchGoogleSheetControlResult({
     existingControls
   );
 
-  const apiKey =
-    getGoogleSheetsApiKey();
-
-  if (!apiKey) {
-    throw createServiceError(
-      `Google Sheets integration is missing ${GOOGLE_SHEETS_API_KEY_ENV_NAME}.`,
-      {
-        name:
-          "GoogleSheetsNotConfiguredError",
-
-        code:
-          "GOOGLE_SHEETS_NOT_CONFIGURED",
-
-        operation:
-          "fetch control result",
-
-        context: {
-          spreadsheetId,
-          sheetName,
-          frameworkId,
-        },
-      }
-    );
-  }
+  const {
+    accessToken,
+    apiKey,
+  } =
+    await getGoogleSheetsRequestCredentials();
 
   const values =
     await fetchGoogleSheetValues({
@@ -626,18 +712,13 @@ export async function fetchGoogleSheetControlResult({
         ),
 
       apiKey,
+      accessToken,
       signal,
     });
 
-  const normalizedHeaderRow =
-    normalizeHeaderRow(
-      headerRow
-    );
-
   const rows =
     convertValuesToRows(
-      values,
-      normalizedHeaderRow
+      values
     );
 
   return processGoogleSheetRows({
@@ -646,9 +727,6 @@ export async function fetchGoogleSheetControlResult({
     frameworkId,
     columnMapping,
     defaultCategory,
-
-    headerRow:
-      normalizedHeaderRow,
   });
 }
 
@@ -660,6 +738,7 @@ async function fetchGoogleSheetValues({
   spreadsheetId,
   sheetName,
   apiKey,
+  accessToken,
   signal,
 }) {
 
@@ -681,6 +760,13 @@ async function fetchGoogleSheetValues({
         headers: {
           Accept:
             "application/json",
+
+          ...(accessToken
+            ? {
+                Authorization:
+                  `Bearer ${accessToken}`,
+              }
+            : {}),
         },
 
         signal,
@@ -787,11 +873,22 @@ function createGoogleSheetsApiError({
   }
 
   if (
+    response.status === 401
+  ) {
+    message =
+      apiMessage ||
+      "Google authorization has expired or is invalid. Try refreshing again to reconnect.";
+
+    code =
+      "GOOGLE_SHEETS_AUTHENTICATION_REQUIRED";
+  }
+
+  if (
     response.status === 403
   ) {
     message =
       apiMessage ||
-      "The spreadsheet is not accessible with the configured Google Sheets API key.";
+      "The signed-in Google account does not have permission to view this spreadsheet.";
 
     code =
       "GOOGLE_SHEETS_ACCESS_DENIED";
@@ -840,8 +937,7 @@ function createGoogleSheetsApiError({
 // --------------------------------------------------
 
 export function convertValuesToRows(
-  values = [],
-  headerRow = 1
+  values = []
 ) {
   if (!Array.isArray(values)) {
     throw createGoogleSheetsServiceError(
@@ -859,47 +955,13 @@ export function convertValuesToRows(
     return [];
   }
 
-  const normalizedHeaderRow =
-    normalizeHeaderRow(
-      headerRow
-    );
-
-  const headerIndex =
-    normalizedHeaderRow - 1;
-
-  if (
-    headerIndex >=
-    values.length
-  ) {
-    throw createGoogleSheetsServiceError(
-      `Header row ${normalizedHeaderRow} is outside the worksheet data range.`,
-      {
-        code:
-          "GOOGLE_SHEETS_HEADER_ROW_OUT_OF_RANGE",
-
-        operation:
-          "convert values to rows",
-
-        context: {
-          headerRow:
-            normalizedHeaderRow,
-
-          availableRows:
-            values.length,
-        },
-      }
-    );
-  }
-
-  const headerValues =
-    Array.isArray(
-      values[headerIndex]
-    )
-      ? values[headerIndex]
+  const headerRow =
+    Array.isArray(values[0])
+      ? values[0]
       : [];
 
   const headings =
-    headerValues.map(
+    headerRow.map(
       normalizeText
     );
 
@@ -919,9 +981,7 @@ export function convertValuesToRows(
   }
 
   return values
-    .slice(
-      headerIndex + 1
-    )
+    .slice(1)
     .filter(
       (row) =>
         Array.isArray(row) &&
@@ -976,7 +1036,6 @@ export function processGoogleSheetRows({
   columnMapping =
     DEFAULT_COLUMN_MAPPING,
   defaultCategory = "",
-  headerRow = 1,
 } = {}) {
   if (!Array.isArray(rows)) {
     throw createGoogleSheetsServiceError(
@@ -1003,6 +1062,10 @@ export function processGoogleSheetRows({
         requirementNumber: "",
         category: "",
         question: "",
+        owner: "",
+        status: "",
+        evidenceUrl: "",
+        comments: "",
       },
     };
   }
@@ -1083,12 +1146,8 @@ export function processGoogleSheetRows({
       canonicalRows,
       existingControls,
       frameworkId,
-      {
-        sourceRowOffset:
-          normalizeHeaderRow(
-            headerRow
-          ),
-      }
+      columnMapping,
+      defaultCategory
     );
 
   return {
@@ -1113,6 +1172,18 @@ export function processGoogleSheetRows({
       question:
         columnConfiguration
           .questionColumn,
+
+      owner:
+        columnConfiguration.ownerColumn,
+
+      status:
+        columnConfiguration.statusColumn,
+
+      evidenceUrl:
+        columnConfiguration.evidenceUrlColumn,
+
+      comments:
+        columnConfiguration.commentsColumn,
 
       defaultCategory:
         columnConfiguration

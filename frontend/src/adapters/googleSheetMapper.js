@@ -132,56 +132,6 @@ function getRowFieldValue(
 }
 
 // --------------------------------------------------
-// Example-row handling
-// --------------------------------------------------
-
-function isExampleValue(value) {
-  const normalizedValue =
-    normalizeText(value)
-      .toLowerCase();
-
-  if (!normalizedValue) {
-    return false;
-  }
-
-  return (
-    /^e\.?\s*g\.?(?:\s|$)/i.test(
-      normalizedValue
-    ) ||
-    /^example(?:\s|$)/i.test(
-      normalizedValue
-    )
-  );
-}
-
-function isExampleRow(row) {
-  if (!isObjectRecord(row)) {
-    return false;
-  }
-
-  const requirementNumber =
-    getRowFieldValue(
-      row,
-      "requirementNumber"
-    );
-
-  const question =
-    getRowFieldValue(
-      row,
-      "question"
-    );
-
-  return (
-    isExampleValue(
-      requirementNumber
-    ) ||
-    isExampleValue(
-      question
-    )
-  );
-}
-
-// --------------------------------------------------
 // Row content checks
 // --------------------------------------------------
 
@@ -263,29 +213,24 @@ function getControlComments(control) {
 // --------------------------------------------------
 
 /**
- * Matches one worksheet row to at most one existing
+ * Matches a Google Sheets row with an existing
  * dashboard control.
  *
  * Matching priority:
- * 1. Requirement number + question
+ * 1. Requirement number
  * 2. Question
- * 3. Requirement number only when exactly one unused
- *    control has that requirement number
+ *
+ * Requirement number is preferred because it should
+ * remain stable even when the question text changes.
  */
 function findMatchingExistingControl(
   existingControls,
   requirementNumber,
-  question,
-  usedExistingControls
+  question
 ) {
-  const availableControls =
+  const safeExistingControls =
     getSafeControls(
       existingControls
-    ).filter(
-      (control) =>
-        !usedExistingControls.has(
-          control
-        )
     );
 
   const comparableRequirementNumber =
@@ -293,204 +238,73 @@ function findMatchingExistingControl(
       requirementNumber
     );
 
-  const comparableQuestion =
-    normalizeComparableValue(
-      question
-    );
-
-  if (
-    comparableRequirementNumber &&
-    comparableQuestion
-  ) {
-    const exactCompositeMatch =
-      availableControls.find(
+  if (comparableRequirementNumber) {
+    const requirementMatch =
+      safeExistingControls.find(
         (control) =>
           normalizeComparableValue(
             getControlRequirementNumber(
               control
             )
           ) ===
-            comparableRequirementNumber &&
-          normalizeComparableValue(
-            getControlQuestion(
-              control
-            )
-          ) ===
-            comparableQuestion
+          comparableRequirementNumber
       );
 
-    if (exactCompositeMatch) {
-      return exactCompositeMatch;
+    if (requirementMatch) {
+      return requirementMatch;
     }
   }
 
-  if (comparableQuestion) {
-    const questionMatch =
-      availableControls.find(
-        (control) =>
-          normalizeComparableValue(
-            getControlQuestion(
-              control
-            )
-          ) === comparableQuestion
-      );
+  const comparableQuestion =
+    normalizeComparableValue(
+      question
+    );
 
-    if (questionMatch) {
-      return questionMatch;
-    }
-  }
-
-  if (!comparableRequirementNumber) {
+  if (!comparableQuestion) {
     return undefined;
   }
 
-  const requirementMatches =
-    availableControls.filter(
-      (control) =>
-        normalizeComparableValue(
-          getControlRequirementNumber(
-            control
-          )
-        ) ===
-        comparableRequirementNumber
-    );
-
-  return requirementMatches.length === 1
-    ? requirementMatches[0]
-    : undefined;
+  return safeExistingControls.find(
+    (control) =>
+      normalizeComparableValue(
+        getControlQuestion(control)
+      ) === comparableQuestion
+  );
 }
 
 // --------------------------------------------------
 // Stable control ID generation
 // --------------------------------------------------
 
-function createCompactHash(value) {
-  const text =
-    String(value ?? "");
-
-  let hash = 2166136261;
-
-  for (
-    let index = 0;
-    index < text.length;
-    index += 1
-  ) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(
-      hash,
-      16777619
-    );
-  }
-
-  return (
-    hash >>> 0
-  ).toString(36);
-}
-
-function createSlug(value) {
-  return normalizeText(value)
-    .toLowerCase()
-    .replace(
-      /[^a-z0-9]+/g,
-      "-"
-    )
-    .replace(
-      /^-+|-+$/g,
-      ""
-    )
-    .slice(0, 48);
-}
-
 function createGoogleSheetControlId(
   requirementNumber,
   question,
   index
 ) {
-  const requirementSlug =
-    createSlug(
+  const identifier =
+    normalizeText(
       requirementNumber
     ) ||
-    "requirement";
+    normalizeText(question) ||
+    `row-${index + 1}`;
 
-  const identitySource = [
-    normalizeComparableValue(
-      requirementNumber
-    ),
-    normalizeComparableValue(
-      question
-    ),
-    String(index),
-  ].join("|");
+  const normalizedIdentifier =
+    identifier
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]+/g,
+        "-"
+      )
+      .replace(
+        /^-+|-+$/g,
+        ""
+      );
 
-  return [
-    "sheet-control",
-    requirementSlug,
-    createCompactHash(
-      identitySource
-    ),
-  ].join("-");
-}
-
-// --------------------------------------------------
-// Continuation-row handling
-// --------------------------------------------------
-
-/**
- * Appends a blank-REQ.No continuation row to the
- * previously mapped control.
- */
-function appendContinuationRowToPreviousControl(
-  mappedControls,
-  row
-) {
-  if (
-    !Array.isArray(mappedControls) ||
-    mappedControls.length === 0
-  ) {
-    return false;
-  }
-
-  const continuationQuestion =
-    getRowFieldValue(
-      row,
-      "question"
-    );
-
-  if (!continuationQuestion) {
-    return false;
-  }
-
-  const previousIndex =
-    mappedControls.length - 1;
-
-  const previousControl =
-    mappedControls[
-      previousIndex
-    ];
-
-  const existingQuestion =
-    getControlQuestion(
-      previousControl
-    );
-
-  const combinedQuestion = [
-    existingQuestion,
-    continuationQuestion,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  mappedControls[
-    previousIndex
-  ] = {
-    ...previousControl,
-    question:
-      combinedQuestion,
-    control:
-      combinedQuestion,
-  };
-
-  return true;
+  return (
+    "sheet-control-" +
+    (normalizedIdentifier ||
+      `row-${index + 1}`)
+  );
 }
 
 // --------------------------------------------------
@@ -501,17 +315,9 @@ function appendContinuationRowToPreviousControl(
  * Converts one Google Sheets row into the canonical
  * control model used by the dashboard.
  *
- * Requirement data is refreshed from Google Sheets:
- * - requirementNumber
- * - category
- * - question
- *
- * Operational data remains dashboard-managed when an
- * existing control is available:
- * - owner
- * - status
- * - evidenceUrl
- * - comments
+ * All displayed control data is refreshed from Google
+ * Sheets. Existing controls are used only to preserve
+ * stable identifiers and creation metadata.
  */
 export function mapGoogleSheetRowToControl(
   row,
@@ -592,21 +398,6 @@ export function mapGoogleSheetRowToControl(
       "comments"
     );
 
-  const existingOwner =
-    getControlOwner(
-      existingControl
-    );
-
-  const existingEvidenceUrl =
-    getControlEvidenceUrl(
-      existingControl
-    );
-
-  const existingComments =
-    getControlComments(
-      existingControl
-    );
-
   const controlInput = {
     id:
       normalizeText(
@@ -639,29 +430,21 @@ export function mapGoogleSheetRowToControl(
         existingControl
       ),
 
-    /*
-     * Dashboard values take priority for existing
-     * controls. Sheet values initialize new controls.
-     */
     owner:
-      existingOwner ||
       sheetOwner ||
       DEFAULT_CONTROL_OWNER,
 
     status:
       normalizeControlStatus(
-        existingControl?.status ||
-          sheetStatus ||
+        sheetStatus ||
           DEFAULT_CONTROL_STATUS
       ),
 
     evidenceUrl:
-      existingEvidenceUrl ||
       sheetEvidenceUrl ||
       DEFAULT_CONTROL_EVIDENCE_URL,
 
     comments:
-      existingComments ||
       sheetComments ||
       DEFAULT_CONTROL_COMMENTS,
 
@@ -699,14 +482,13 @@ export function mapGoogleSheetRowToControl(
  * controls.
  *
  * Empty spreadsheet rows are ignored. Stable existing
- * control IDs and dashboard-managed values are
- * preserved whenever a matching control is found.
+ * control IDs are preserved whenever a matching control
+ * is found.
  */
 export function mapGoogleSheetRowsToControls(
   rows = [],
   existingControls = [],
-  frameworkId = "",
-  options = {}
+  frameworkId = ""
 ) {
   const safeRows =
     getSafeRows(rows);
@@ -716,19 +498,8 @@ export function mapGoogleSheetRowsToControls(
       existingControls
     );
 
-  const usedExistingControls =
-    new Set();
-
   const normalizedFrameworkId =
     normalizeText(frameworkId);
-
-  const sourceRowOffset =
-    Number.isInteger(
-      options?.sourceRowOffset
-    ) &&
-    options.sourceRowOffset >= 1
-      ? options.sourceRowOffset
-      : 1;
 
   return safeRows.reduce(
     (
@@ -739,14 +510,6 @@ export function mapGoogleSheetRowsToControls(
       if (
         !hasMappedRowContent(row)
       ) {
-        return mappedControls;
-      }
-
-      /*
-       * Ignore worksheet guidance rows such as:
-       * "e.g SAP ECC" or "example application".
-       */
-      if (isExampleRow(row)) {
         return mappedControls;
       }
 
@@ -762,43 +525,12 @@ export function mapGoogleSheetRowsToControls(
           "question"
         );
 
-      /*
-       * Blank REQ.No plus question text means the row
-       * continues the previous requirement.
-       */
-      if (
-        !requirementNumber &&
-        question
-      ) {
-        appendContinuationRowToPreviousControl(
-          mappedControls,
-          row
-        );
-
-        return mappedControls;
-      }
-
-      /*
-       * Ignore rows that cannot represent a standalone
-       * control.
-       */
-      if (!requirementNumber) {
-        return mappedControls;
-      }
-
       const existingControl =
         findMatchingExistingControl(
           safeExistingControls,
           requirementNumber,
-          question,
-          usedExistingControls
+          question
         );
-
-      if (existingControl) {
-        usedExistingControls.add(
-          existingControl
-        );
-      }
 
       const mappedControl =
         mapGoogleSheetRowToControl(
@@ -817,9 +549,7 @@ export function mapGoogleSheetRowsToControls(
               mappedControls.length,
 
             sourceRowNumber:
-              rowIndex +
-              sourceRowOffset +
-              1,
+              rowIndex + 2,
           }
         );
 

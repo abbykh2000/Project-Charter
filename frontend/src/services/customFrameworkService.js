@@ -55,39 +55,12 @@ function normalizeLowercase(value) {
   return normalizeText(value).toLowerCase();
 }
 
-function normalizeHeaderRow(value) {
-  const parsedValue =
-    Number.parseInt(
-      String(value ?? ""),
-      10
-    );
-
-  return Number.isInteger(
-    parsedValue
-  ) &&
-    parsedValue >= 1
-    ? parsedValue
-    : 1;
-}
-
 function getSafeFrameworks(frameworks) {
   return Array.isArray(frameworks) ? frameworks : [];
 }
 
 function getSafeControls(controls) {
   return Array.isArray(controls) ? controls : [];
-}
-
-function getControlRequirementNumber(
-  control
-) {
-  return normalizeText(
-    control?.requirementNumber ??
-      control?.reqNo ??
-      control?.requirementNo ??
-      control?.["REQ.No"] ??
-      control?.["REQ No"]
-  );
 }
 
 function findFrameworkIndexById(frameworks, frameworkId) {
@@ -130,14 +103,6 @@ function getGoogleSheetConfiguration(framework) {
         framework?.sheetName ??
         legacyGoogleWorkspace?.sheetName
     ),
-
-    headerRow:
-      normalizeHeaderRow(
-        googleSheet.headerRow ??
-          framework?.headerRow ??
-          legacyGoogleWorkspace?.headerRow ??
-          1
-      ),
 
     defaultCategory: normalizeText(
       googleSheet.defaultCategory ??
@@ -214,27 +179,6 @@ function hasValidGoogleSheetsConfiguration(framework) {
   });
 }
 
-function removeLegacyGoogleSheetFields(
-  framework
-) {
-  const canonicalFramework = {
-    ...framework,
-  };
-
-  delete canonicalFramework.spreadsheetId;
-  delete canonicalFramework.spreadsheetUrl;
-  delete canonicalFramework.sheetName;
-  delete canonicalFramework.headerRow;
-  delete canonicalFramework.defaultCategory;
-  delete canonicalFramework.lastSyncedAt;
-  delete canonicalFramework.syncStatus;
-  delete canonicalFramework.syncError;
-  delete canonicalFramework.googleWorkspace;
-  delete canonicalFramework.googleIntegration;
-
-  return canonicalFramework;
-}
-
 function applyGoogleSheetMetadata(
   framework,
   overrides = {}
@@ -245,50 +189,13 @@ function applyGoogleSheetMetadata(
   const usesGoogleSheets =
     isGoogleSheetsFramework({
       ...framework,
-
       integrationType:
         overrides.integrationType ??
         framework?.integrationType,
-
-      sourceType:
-        overrides.sourceType ??
-        framework?.sourceType,
-
       source:
         overrides.source ??
         framework?.source,
     });
-
-  const canonicalFramework =
-    removeLegacyGoogleSheetFields({
-      ...framework,
-
-      sourceType: usesGoogleSheets
-        ? FRAMEWORK_SOURCE_GOOGLE_SHEETS
-        : FRAMEWORK_SOURCE_LOCAL,
-
-      source: usesGoogleSheets
-        ? FRAMEWORK_SOURCE_GOOGLE_SHEETS
-        : FRAMEWORK_SOURCE_LOCAL,
-
-      integrationType: usesGoogleSheets
-        ? INTEGRATION_TYPE_GOOGLE_SHEETS
-        : INTEGRATION_TYPE_NONE,
-    });
-
-  /*
-   * Local frameworks do not carry Google Sheets
-   * configuration or synchronization metadata.
-   */
-  if (!usesGoogleSheets) {
-    const localFramework = {
-      ...canonicalFramework,
-    };
-
-    delete localFramework.googleSheet;
-
-    return localFramework;
-  }
 
   const googleSheet = {
     spreadsheetId: normalizeText(
@@ -306,17 +213,10 @@ function applyGoogleSheetMetadata(
         configuration.sheetName
     ),
 
-    headerRow:
-      normalizeHeaderRow(
-        overrides.headerRow ??
-          configuration.headerRow
-      ),
-
-    defaultCategory:
-      normalizeText(
-        overrides.defaultCategory ??
-          configuration.defaultCategory
-      ) || "General",
+    defaultCategory: normalizeText(
+      overrides.defaultCategory ??
+        configuration.defaultCategory
+    ) || "General",
 
     lastSyncedAt:
       overrides.lastSyncedAt ??
@@ -333,92 +233,31 @@ function applyGoogleSheetMetadata(
         configuration.syncError
     ),
 
-    columnMapping: {
-      ...cloneData(
-        configuration.columnMapping
-      ),
-
-      ...(
-        overrides.columnMapping &&
-        typeof overrides.columnMapping ===
-          "object" &&
-        !Array.isArray(
-          overrides.columnMapping
-        )
-          ? cloneData(
-              overrides.columnMapping
-            )
-          : {}
-      ),
-    },
+    columnMapping:
+      overrides.columnMapping &&
+      typeof overrides.columnMapping === "object" &&
+      !Array.isArray(overrides.columnMapping)
+        ? cloneData(overrides.columnMapping)
+        : cloneData(configuration.columnMapping),
   };
 
   return {
-    ...canonicalFramework,
+    ...framework,
+
+    sourceType: usesGoogleSheets
+      ? FRAMEWORK_SOURCE_GOOGLE_SHEETS
+      : FRAMEWORK_SOURCE_LOCAL,
+
+    source: usesGoogleSheets
+      ? FRAMEWORK_SOURCE_GOOGLE_SHEETS
+      : FRAMEWORK_SOURCE_LOCAL,
+
+    integrationType: usesGoogleSheets
+      ? INTEGRATION_TYPE_GOOGLE_SHEETS
+      : INTEGRATION_TYPE_NONE,
+
     googleSheet,
   };
-}
-
-// --------------------------------------------------
-// Stored framework migration
-// --------------------------------------------------
-
-function hasLegacyGoogleSheetFields(
-  framework
-) {
-  if (
-    !framework ||
-    typeof framework !== "object" ||
-    Array.isArray(framework)
-  ) {
-    return false;
-  }
-
-  return Boolean(
-    framework.spreadsheetId !==
-      undefined ||
-      framework.spreadsheetUrl !==
-        undefined ||
-      framework.sheetName !==
-        undefined ||
-      framework.headerRow !==
-        undefined ||
-      framework.defaultCategory !==
-        undefined ||
-      framework.lastSyncedAt !==
-        undefined ||
-      framework.syncStatus !==
-        undefined ||
-      framework.syncError !==
-        undefined ||
-      framework.googleWorkspace !==
-        undefined ||
-      framework.googleIntegration !==
-        undefined ||
-      (
-        !isGoogleSheetsFramework(
-          framework
-        ) &&
-        framework.googleSheet !==
-          undefined
-      )
-  );
-}
-
-function normalizeStoredFramework(
-  framework
-) {
-  if (
-    !framework ||
-    typeof framework !== "object" ||
-    Array.isArray(framework)
-  ) {
-    return framework;
-  }
-
-  return applyGoogleSheetMetadata(
-    framework
-  );
 }
 
 // --------------------------------------------------
@@ -535,35 +374,9 @@ async function loadFrameworks() {
   const storedFrameworks =
     await getStoredFrameworks();
 
-  const safeFrameworks =
-    getSafeFrameworks(
-      storedFrameworks
-    );
-
-  const requiresMigration =
-    safeFrameworks.some(
-      hasLegacyGoogleSheetFields
-    );
-
-  const normalizedFrameworks =
-    safeFrameworks.map(
-      normalizeStoredFramework
-    );
-
-  /*
-   * Persist the canonical structure once so future
-   * reads use framework.googleSheet only for Google
-   * Sheets frameworks.
-   */
-  if (requiresMigration) {
-    await saveStoredFrameworks(
-      cloneData(
-        normalizedFrameworks
-      )
-    );
-  }
-
-  return normalizedFrameworks;
+  return getSafeFrameworks(
+    storedFrameworks
+  );
 }
 
 async function persistFrameworks(frameworks) {
@@ -582,24 +395,8 @@ async function persistFrameworks(frameworks) {
 async function fetchFrameworkControlsFromGoogleSheet(
   framework
 ) {
-  /*
-   * Older imports may contain continuation rows that
-   * were stored as standalone controls with no REQ.No.
-   * Exclude those cached records before mapping so the
-   * mapper can rebuild them as continuations of the
-   * preceding requirement.
-   */
   const existingControls =
-    getSafeControls(
-      framework?.controls
-    ).filter(
-      (control) =>
-        Boolean(
-          getControlRequirementNumber(
-            control
-          )
-        )
-    );
+    getSafeControls(framework?.controls);
 
   if (!isGoogleSheetsFramework(framework)) {
     return cloneData(existingControls);
@@ -624,10 +421,6 @@ async function fetchFrameworkControlsFromGoogleSheet(
         configuration.sheetName,
       frameworkId: framework.id,
       existingControls,
-
-      headerRow:
-        configuration.headerRow,
-
       columnMapping:
         configuration.columnMapping,
       defaultCategory:
@@ -789,35 +582,6 @@ export async function updateCustomFramework(
   const incomingGoogleSheet =
     frameworkInput.googleSheet ?? {};
 
-  const existingGoogleSheet =
-    getGoogleSheetConfiguration(
-      existingFramework
-    );
-
-  const mergedGoogleSheet = {
-    ...existingGoogleSheet,
-    ...incomingGoogleSheet,
-
-    columnMapping: {
-      ...cloneData(
-        existingGoogleSheet.columnMapping
-      ),
-
-      ...(
-        incomingGoogleSheet.columnMapping &&
-        typeof incomingGoogleSheet.columnMapping ===
-          "object" &&
-        !Array.isArray(
-          incomingGoogleSheet.columnMapping
-        )
-          ? cloneData(
-              incomingGoogleSheet.columnMapping
-            )
-          : {}
-      ),
-    },
-  };
-
   const updatedFramework =
     applyGoogleSheetMetadata(
       {
@@ -838,14 +602,18 @@ export async function updateCustomFramework(
           existingFramework.integrationType ??
           INTEGRATION_TYPE_NONE,
 
-        googleSheet:
-          mergedGoogleSheet,
+        googleSheet: {
+          ...getGoogleSheetConfiguration(
+            existingFramework
+          ),
+          ...incomingGoogleSheet,
+        },
 
         controls: getSafeControls(
           factoryUpdatedFramework.controls
         ),
       },
-      mergedGoogleSheet
+      incomingGoogleSheet
     );
 
   validateFrameworkInput(
@@ -880,8 +648,7 @@ export async function updateCustomFramework(
 // --------------------------------------------------
 
 export async function refreshCustomFrameworkFromGoogleSheet(
-  id,
-  googleSheetOverrides = null
+  id
 ) {
   const frameworks =
     await loadFrameworks();
@@ -901,41 +668,9 @@ export async function refreshCustomFrameworkFromGoogleSheet(
   const existingFramework =
     frameworks[frameworkIndex];
 
-  const hasGoogleSheetOverrides =
-    googleSheetOverrides &&
-    typeof googleSheetOverrides ===
-      "object" &&
-    !Array.isArray(
-      googleSheetOverrides
-    );
-
-  /*
-   * The Edit page may pass its current Google Sheets
-   * configuration directly. This prevents refresh from
-   * falling back to an older saved column mapping.
-   */
-  const frameworkForRefresh =
-    hasGoogleSheetOverrides
-      ? applyGoogleSheetMetadata(
-          existingFramework,
-          googleSheetOverrides
-        )
-      : existingFramework;
-
-  /*
-   * Capture the complete configuration once so the
-   * same spreadsheet, worksheet, default category and
-   * column mappings are preserved throughout the
-   * refresh operation.
-   */
-  const refreshConfiguration =
-    getGoogleSheetConfiguration(
-      frameworkForRefresh
-    );
-
   if (
     !isGoogleSheetsFramework(
-      frameworkForRefresh
+      existingFramework
     )
   ) {
     throw createGoogleSheetsServiceError(
@@ -953,7 +688,7 @@ export async function refreshCustomFrameworkFromGoogleSheet(
 
   if (
     !hasValidGoogleSheetsConfiguration(
-      frameworkForRefresh
+      existingFramework
     )
   ) {
     throw createGoogleSheetsServiceError(
@@ -970,73 +705,66 @@ export async function refreshCustomFrameworkFromGoogleSheet(
     );
   }
 
-  try {
-    const refreshedControls =
-      await fetchFrameworkControlsFromGoogleSheet(
-        frameworkForRefresh
-      );
+try {
+  const existingGoogleSheetConfiguration =
+    getGoogleSheetConfiguration(
+      existingFramework
+    );
 
-    /*
-     * Existing controls are passed into the mapper so
-     * dashboard-managed owner, evidence, comments, and
-     * status values remain unchanged while Google Sheets
-     * refreshes requirement number, category, and question.
-     */
-    const normalizedRefreshedFramework =
-      updateFramework(
-        frameworkForRefresh,
-        {
-          controls: refreshedControls,
+  const refreshedControls =
+    await fetchFrameworkControlsFromGoogleSheet(
+      existingFramework
+    );
 
-          /*
-           * Google Sheets refreshes must preserve the
-           * dashboard-managed owner, status, evidence,
-           * comments and other operational values.
-           */
-          preserveDashboardManagedFields:
-            true,
-        }
-      );
+  /*
+   * Existing controls are supplied only so stable IDs
+   * and creation metadata can be retained. All displayed
+   * control values are refreshed from Google Sheets.
+   *
+   * Preserve the framework's saved Google Sheets
+   * configuration because updateFramework may recreate
+   * nested metadata using default values.
+   */
+  const normalizedRefreshedFramework =
+    updateFramework(
+      existingFramework,
+      {
+        controls: refreshedControls,
+      }
+    );
 
-    const syncedAt =
-      new Date().toISOString();
+  const refreshedFramework =
+    applyGoogleSheetMetadata(
+      normalizedRefreshedFramework,
+      {
+        spreadsheetId:
+          existingGoogleSheetConfiguration
+            .spreadsheetId,
 
-    const refreshedFramework =
-      applyGoogleSheetMetadata(
-        normalizedRefreshedFramework,
-        {
-          spreadsheetId:
-            refreshConfiguration.spreadsheetId,
+        spreadsheetUrl:
+          existingGoogleSheetConfiguration
+            .spreadsheetUrl,
 
-          spreadsheetUrl:
-            refreshConfiguration.spreadsheetUrl,
+        sheetName:
+          existingGoogleSheetConfiguration
+            .sheetName,
 
-          sheetName:
-            refreshConfiguration.sheetName,
+        defaultCategory:
+          existingGoogleSheetConfiguration
+            .defaultCategory,
 
-          headerRow:
-            refreshConfiguration.headerRow,
+        columnMapping:
+          existingGoogleSheetConfiguration
+            .columnMapping,
 
-          defaultCategory:
-            refreshConfiguration.defaultCategory,
+        lastSyncedAt:
+          new Date().toISOString(),
 
-          columnMapping:
-            cloneData(
-              refreshConfiguration.columnMapping
-            ),
+        syncStatus:
+          GOOGLE_SHEET_SYNC_STATUS_SYNCED,
 
-          lastSyncedAt:
-            syncedAt,
-
-          syncStatus:
-            GOOGLE_SHEET_SYNC_STATUS_SYNCED,
-
-          syncError: "",
-        }
-      );
-
-    validateFrameworkInput(
-      refreshedFramework
+        syncError: "",
+      }
     );
 
     validateFrameworkUniqueness(
@@ -1063,31 +791,10 @@ export async function refreshCustomFrameworkFromGoogleSheet(
   } catch (error) {
     const failedFramework =
       applyGoogleSheetMetadata(
-        frameworkForRefresh,
+        existingFramework,
         {
-          spreadsheetId:
-            refreshConfiguration.spreadsheetId,
-
-          spreadsheetUrl:
-            refreshConfiguration.spreadsheetUrl,
-
-          sheetName:
-            refreshConfiguration.sheetName,
-
-          headerRow:
-            refreshConfiguration.headerRow,
-
-          defaultCategory:
-            refreshConfiguration.defaultCategory,
-
-          columnMapping:
-            cloneData(
-              refreshConfiguration.columnMapping
-            ),
-
           syncStatus:
             GOOGLE_SHEET_SYNC_STATUS_ERROR,
-
           syncError:
             error instanceof Error
               ? error.message

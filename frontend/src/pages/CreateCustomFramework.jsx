@@ -89,23 +89,6 @@ function getDefaultGoogleSheetConfiguration() {
       defaultConfiguration
         ?.sheetName ?? "",
 
-    headerRow:
-      Number.isInteger(
-        Number(
-          defaultConfiguration
-            ?.headerRow
-        )
-      ) &&
-      Number(
-        defaultConfiguration
-          ?.headerRow
-      ) >= 1
-        ? Number(
-            defaultConfiguration
-              ?.headerRow
-          )
-        : 1,
-
     defaultCategory:
       defaultConfiguration
         ?.defaultCategory ?? "",
@@ -128,6 +111,30 @@ function getDefaultGoogleSheetConfiguration() {
           ?.columnMapping
           ?.question ??
         "Question",
+
+      owner:
+        defaultConfiguration
+          ?.columnMapping
+          ?.owner ??
+        "Owner",
+
+      status:
+        defaultConfiguration
+          ?.columnMapping
+          ?.status ??
+        "Status",
+
+      evidenceUrl:
+        defaultConfiguration
+          ?.columnMapping
+          ?.evidenceUrl ??
+        "Evidence",
+
+      comments:
+        defaultConfiguration
+          ?.columnMapping
+          ?.comments ??
+        "Comments",
     },
 
     lastSyncedAt: null,
@@ -447,19 +454,12 @@ function CreateCustomFramework() {
     const { name, value } =
       event.target;
 
-    const nextValue =
-      name === "headerRow"
-        ? value === ""
-          ? ""
-          : Number(value)
-        : value;
-
     setFormData((current) => ({
       ...current,
 
       googleSheet: {
         ...current.googleSheet,
-        [name]: nextValue,
+        [name]: value,
       },
     }));
 
@@ -627,7 +627,9 @@ function CreateCustomFramework() {
           : INTEGRATION_TYPE_NONE,
 
       controls:
-        preparedControls,
+        googleSheetsEnabled
+          ? []
+          : preparedControls,
 
       googleSheet:
         googleSheetsEnabled
@@ -651,13 +653,6 @@ function CreateCustomFramework() {
                   formData
                     .googleSheet
                     .sheetName
-                ),
-
-              headerRow:
-                Number(
-                  formData
-                    .googleSheet
-                    .headerRow
                 ),
 
               defaultCategory:
@@ -693,6 +688,26 @@ function CreateCustomFramework() {
                       .question
                   ) ||
                   "Question",
+
+                owner:
+                  normalizeText(
+                    formData.googleSheet.columnMapping.owner
+                  ) || "Owner",
+
+                status:
+                  normalizeText(
+                    formData.googleSheet.columnMapping.status
+                  ) || "Status",
+
+                evidenceUrl:
+                  normalizeText(
+                    formData.googleSheet.columnMapping.evidenceUrl
+                  ) || "Evidence",
+
+                comments:
+                  normalizeText(
+                    formData.googleSheet.columnMapping.comments
+                  ) || "Comments",
               },
 
               lastSyncedAt: null,
@@ -704,33 +719,6 @@ function CreateCustomFramework() {
             }
           : getDefaultGoogleSheetConfiguration(),
     };
-
-    if (googleSheetsEnabled) {
-      const headerRow =
-        Number(
-          formData
-            .googleSheet
-            .headerRow
-        );
-
-      if (
-        !Number.isInteger(
-          headerRow
-        ) ||
-        headerRow < 1
-      ) {
-        setError(
-          "Header Row must be a whole number greater than or equal to 1."
-        );
-
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-
-        return;
-      }
-    }
 
     const validationError =
       getFrameworkValidationError(
@@ -820,11 +808,10 @@ function CreateCustomFramework() {
               Build a local compliance
               framework or connect a Google
               Sheet containing your
-              requirements. Operational
-              fields such as owners, statuses,
-              evidence links, and comments
-              remain editable in the
-              dashboard.
+              requirements. Google Sheets
+              controls are read-only and all
+              displayed values come from the
+              source worksheet.
             </p>
           </div>
 
@@ -1146,35 +1133,6 @@ function CreateCustomFramework() {
                 />
               </FormField>
 
-              <FormField
-                label="Header Row"
-                required
-              >
-                <input
-                  type="number"
-                  name="headerRow"
-                  min="1"
-                  step="1"
-                  value={
-                    formData
-                      .googleSheet
-                      .headerRow
-                  }
-                  onChange={
-                    handleGoogleSheetChange
-                  }
-                  style={inputStyle}
-                  placeholder="1"
-                  disabled={saving}
-                />
-
-                <span style={helperTextStyle}>
-                  Enter the worksheet row
-                  containing the actual
-                  column headings.
-                </span>
-              </FormField>
-
               <FormField label="Spreadsheet URL">
                 <input
                   type="url"
@@ -1310,6 +1268,58 @@ function CreateCustomFramework() {
                   autoComplete="off"
                 />
               </FormField>
+
+              <FormField label="Owner Column">
+                <input
+                  type="text"
+                  name="owner"
+                  value={formData.googleSheet.columnMapping.owner}
+                  onChange={handleColumnMappingChange}
+                  style={inputStyle}
+                  placeholder="Owner FY25"
+                  disabled={saving}
+                  autoComplete="off"
+                />
+              </FormField>
+
+              <FormField label="Status Column">
+                <input
+                  type="text"
+                  name="status"
+                  value={formData.googleSheet.columnMapping.status}
+                  onChange={handleColumnMappingChange}
+                  style={inputStyle}
+                  placeholder="Company AI Status"
+                  disabled={saving}
+                  autoComplete="off"
+                />
+              </FormField>
+
+              <FormField label="Evidence Column">
+                <input
+                  type="text"
+                  name="evidenceUrl"
+                  value={formData.googleSheet.columnMapping.evidenceUrl}
+                  onChange={handleColumnMappingChange}
+                  style={inputStyle}
+                  placeholder="Evidence"
+                  disabled={saving}
+                  autoComplete="off"
+                />
+              </FormField>
+
+              <FormField label="Comments Column">
+                <input
+                  type="text"
+                  name="comments"
+                  value={formData.googleSheet.columnMapping.comments}
+                  onChange={handleColumnMappingChange}
+                  style={inputStyle}
+                  placeholder="Comments"
+                  disabled={saving}
+                  autoComplete="off"
+                />
+              </FormField>
             </div>
           </section>
         )}
@@ -1325,12 +1335,13 @@ function CreateCustomFramework() {
               title="Framework Controls"
               description={
                 googleSheetsEnabled
-                  ? "You may add initial controls now. They can later be matched and refreshed from the connected spreadsheet."
+                  ? "Controls are imported from Google Sheets after the framework is created."
                   : "Add the controls that will be tracked as part of this custom framework."
               }
               noBorder
             />
 
+            {!googleSheetsEnabled && (
             <button
               type="button"
               onClick={addControl}
@@ -1355,6 +1366,7 @@ function CreateCustomFramework() {
 
               Add Control
             </button>
+            )}
           </div>
 
           {googleSheetsEnabled && (
@@ -1363,14 +1375,14 @@ function CreateCustomFramework() {
                 controlsGuidanceStyle
               }
             >
-              Manual controls are optional
-              when using Google Sheets. The
-              framework can be created first
-              and refreshed from its detail
-              page.
+              Create the framework, then use
+              Refresh from Google Sheets to
+              import all read-only control
+              fields from the worksheet.
             </div>
           )}
 
+          {!googleSheetsEnabled && (
           <div style={controlsListStyle}>
             {controls.map(
               (control, index) => (
@@ -1393,6 +1405,7 @@ function CreateCustomFramework() {
               )
             )}
           </div>
+          )}
         </section>
 
         <div style={footerActionsStyle}>

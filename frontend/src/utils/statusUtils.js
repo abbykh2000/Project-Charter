@@ -133,11 +133,36 @@ function findCanonicalStatus(
  * "Not Started".
  */
 export function normalizeControlStatus(status) {
-  return (
+  const canonicalStatus =
     findCanonicalStatus(
       status,
       CONTROL_STATUSES
-    ) || DEFAULT_CONTROL_STATUS
+    );
+
+  if (canonicalStatus) {
+    return canonicalStatus;
+  }
+
+  const normalizedStatus =
+    normalizeComparableStatus(status);
+
+  const sheetStatusAliases = {
+    done: CONTROL_STATUS_PASSED,
+    complete: CONTROL_STATUS_PASSED,
+    completed: CONTROL_STATUS_PASSED,
+    compliant: CONTROL_STATUS_PASSED,
+    ongoing: CONTROL_STATUS_IN_PROGRESS,
+    pending: CONTROL_STATUS_IN_PROGRESS,
+    open: CONTROL_STATUS_NOT_STARTED,
+    "not done": CONTROL_STATUS_NOT_STARTED,
+    noncompliant: CONTROL_STATUS_FAILED,
+    "non-compliant": CONTROL_STATUS_FAILED,
+  };
+
+  return (
+    sheetStatusAliases[
+      normalizedStatus
+    ] || DEFAULT_CONTROL_STATUS
   );
 }
 

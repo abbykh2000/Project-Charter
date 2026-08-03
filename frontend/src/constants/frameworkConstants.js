@@ -168,6 +168,10 @@ export const DEFAULT_GOOGLE_SHEET_COLUMN_MAPPING =
     requirementNumber: "REQ.No",
     category: "Category",
     question: "Question",
+    owner: "Owner",
+    status: "Status",
+    evidenceUrl: "Evidence",
+    comments: "Comments",
   });
 
 /**
@@ -209,8 +213,10 @@ export const GOOGLE_SHEET_COLUMN_ALIASES = {
 
   owner: [
     "Owner",
+    "Owner FY25",
     "Assignee",
     "Responsible Owner",
+    "Control Owner",
     "owner",
   ],
 
@@ -218,6 +224,8 @@ export const GOOGLE_SHEET_COLUMN_ALIASES = {
     "Status",
     "Control Status",
     "Assessment Status",
+    "Company AI Status",
+    "Implementation Status",
     "status",
   ],
 
